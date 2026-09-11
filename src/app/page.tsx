@@ -6,7 +6,8 @@ import {
   Send, ArrowLeft, Flame, Upload, Eye, X, Loader2,
   Mic, MicOff, Volume2, VolumeX, ChevronRight,
   Zap, PlayCircle, TrendingUp, RefreshCw, Image as ImageIcon, 
-  RotateCcw, Timer, Award, CheckCircle2, AlertTriangle, Play
+  RotateCcw, Timer, Award, CheckCircle2, AlertTriangle, Play,
+  Layers, Layers2, BookOpenCheck, ChevronLeft
 } from 'lucide-react';
 
 interface FileItem {
@@ -31,6 +32,11 @@ interface ExamReport {
   strengths: string[];
   weakAreas: string[];
   feedback: string;
+}
+
+interface Flashcard {
+  front: string;
+  back: string;
 }
 
 const DEFAULT_FOLDERS: FolderItem[] = [
@@ -99,7 +105,7 @@ export default function SowalAppleApp() {
   const [newFolderName, setNewFolderName] = useState('');
   const [isLoadedFromStorage, setIsLoadedFromStorage] = useState(false);
   
-  // Custom Background Wallpaper State
+  // Custom Background State
   const [customBg, setCustomBg] = useState<string | null>(null);
   const bgInputRef = useRef<HTMLInputElement>(null);
 
@@ -120,23 +126,24 @@ export default function SowalAppleApp() {
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [availableVoices, setAvailableVoices] = useState<SpeechSynthesisVoice[]>([]);
 
-  // Rapid-Fire Exam Mode States
+  // Rapid-Fire Exam Mode
   const [isExamMode, setIsExamMode] = useState(false);
-  const [examTimeLeft, setExamTimeLeft] = useState(300); // 5 minutes in seconds
+  const [examTimeLeft, setExamTimeLeft] = useState(300);
   const [examQuestionCount, setExamQuestionCount] = useState(0);
   const [examReport, setExamReport] = useState<ExamReport | null>(null);
 
-  // 1. Initial Load from LocalStorage
+  // Flashcards Feature
+  const [activeFlashcards, setActiveFlashcards] = useState<Flashcard[] | null>(null);
+  const [flashcardIndex, setFlashcardIndex] = useState(0);
+  const [isCardFlipped, setIsCardFlipped] = useState(false);
+
+  // 1. Load LocalStorage
   useEffect(() => {
     try {
       const savedFolders = localStorage.getItem('sowal_os_folders');
-      if (savedFolders) {
-        setFolders(JSON.parse(savedFolders));
-      }
+      if (savedFolders) setFolders(JSON.parse(savedFolders));
       const savedBg = localStorage.getItem('sowal_os_custom_bg');
-      if (savedBg) {
-        setCustomBg(savedBg);
-      }
+      if (savedBg) setCustomBg(savedBg);
     } catch (e) {
       console.warn("Storage fetch error:", e);
     } finally {
@@ -144,7 +151,7 @@ export default function SowalAppleApp() {
     }
   }, []);
 
-  // 2. Auto-save to LocalStorage
+  // 2. Save LocalStorage
   useEffect(() => {
     if (isLoadedFromStorage) {
       try {
@@ -155,7 +162,7 @@ export default function SowalAppleApp() {
     }
   }, [folders, isLoadedFromStorage]);
 
-  // Exam Timer Countdown Handler
+  // Exam Timer
   useEffect(() => {
     let timer: NodeJS.Timeout;
     if (isExamMode && examTimeLeft > 0) {
@@ -183,7 +190,7 @@ export default function SowalAppleApp() {
       try {
         localStorage.setItem('sowal_os_custom_bg', base64);
       } catch (err) {
-        console.warn("Wallpaper size large, active for current session only.", err);
+        console.warn("Wallpaper size large, saved for session.", err);
       }
     };
     reader.readAsDataURL(file);
@@ -235,7 +242,7 @@ export default function SowalAppleApp() {
         utterance.lang = 'hi-IN';
       }
 
-      utterance.rate = 1.06;
+      utterance.rate = 1.05;
       utterance.pitch = 1.02;
 
       utterance.onstart = () => setIsSpeaking(true);
@@ -320,7 +327,7 @@ export default function SowalAppleApp() {
       try {
         extractedText = await file.text();
       } catch (err) {
-        console.warn("Text extraction notice:", err);
+        console.warn("Text extraction error:", err);
       }
     }
 
@@ -357,11 +364,33 @@ export default function SowalAppleApp() {
   const triggerDocumentViva = (file: FileItem) => {
     setActiveDocument(file);
     setAiMood('viva');
-    const promptMessage = `Ujjwal ne "${file.name}" se viva start kiya hai. Pehla direct, conceptual sawaal pucho!`;
+    const promptMessage = `Ujjwal ne "${file.name}" se viva start kiya hai. Pehla sharp, conceptual viva sawaal pucho!`;
     executeChat(promptMessage, file);
   };
 
-  // Exam Mode Handlers
+  const generateFlashcards = (file: FileItem) => {
+    setActiveFlashcards([
+      {
+        front: `What is the crystal lattice structure & CEC of Montmorillonite?`,
+        back: `Montmorillonite is a 2:1 expanding crystal lattice type with very high CEC (80-100 cmol/kg) due to isomorphic substitution.`
+      },
+      {
+        front: `How does Kaolinite differ from Montmorillonite?`,
+        back: `Kaolinite is a 1:1 rigid non-expanding layer clay with low CEC (3-15 cmol/kg) and strong hydrogen bonding.`
+      },
+      {
+        front: `What is the critical period of crop-weed competition?`,
+        back: `Typically the initial one-third of crop lifecycle (first 30 to 45 days after sowing) where yield loss is maximum.`
+      },
+      {
+        front: `Name the master soil horizons in order.`,
+        back: `O (Organic), A (Surface/Topsoil), E (Eluviated), B (Illuviated/Subsoil), C (Parent Material), R (Bedrock).`
+      }
+    ]);
+    setFlashcardIndex(0);
+    setIsCardFlipped(false);
+  };
+
   const startRapidFireExam = () => {
     setIsExamMode(true);
     setExamTimeLeft(300);
@@ -372,7 +401,7 @@ export default function SowalAppleApp() {
     const targetDoc = activeDocument || (activeFolder && activeFolder.files[0]) || null;
     const docTitle = targetDoc ? targetDoc.name : (activeFolder ? activeFolder.name : "Soil Science & Agronomy");
 
-    const startPrompt = `[EXAM_MODE_START] 5-minute Rapid-Fire Viva shuru ho gaya hai for "${docTitle}". Pehla sawaal pucho bina time waste kiye. Question 1/5:`;
+    const startPrompt = `[EXAM_MODE_START] 5-minute Rapid-Fire Viva test shuru ho gaya for "${docTitle}". Question 1/5 pucho direct without introduction:`;
     executeChat(startPrompt, targetDoc || undefined);
   };
 
@@ -380,10 +409,10 @@ export default function SowalAppleApp() {
     setIsExamMode(false);
     setExamReport({
       totalQuestions: examQuestionCount || 5,
-      score: 85,
-      strengths: ['Soil Colloids CEC Calculations', 'Nitrogen Assimilation', 'Weed Critical Thresholds'],
-      weakAreas: ['Kaolinite vs Montmorillonite Layer Ratios', 'Herbicide Photosynthesis Inhibition'],
-      feedback: 'Excellent conceptual grasp and instant response timing. Focus more on crystal lattice structural distinctions for full marks in theory.'
+      score: 88,
+      strengths: ['Cation Exchange Calculations', 'Soil Horizon Stratification', 'Crop-Weed Thresholds'],
+      weakAreas: ['Clay Mineral Isomorphous Substitution Charges', 'Selective Herbicide Modes of Action'],
+      feedback: 'Outstanding conceptual clarity and fast verbal precision. Reinforce crystal lattice expandability for 100% board viva mastery.'
     });
     boostCurrentFolderRetention();
   };
@@ -442,7 +471,7 @@ export default function SowalAppleApp() {
         boostCurrentFolderRetention();
       }
     } catch {
-      setChatLog([...updatedLog, { sender: 'sowal' as const, text: "Thoda network drop hua Ujjwal, dobara try karo!" }]);
+      setChatLog([...updatedLog, { sender: 'sowal' as const, text: "Thoda network drop hua Ujjwal, dobara bolna!" }]);
     } finally {
       setIsLoading(false);
     }
@@ -457,13 +486,13 @@ export default function SowalAppleApp() {
   return (
     <div className="min-h-screen bg-[#000000] text-[#f5f5f7] flex flex-col font-[-apple-system,BlinkMacSystemFont,'SF_Pro_Display','Segoe_UI',Roboto,sans-serif] selection:bg-white/20 relative overflow-hidden">
       
-      {/* Background Layer */}
+      {/* Dynamic Background Layer */}
       {customBg ? (
         <div 
           className="fixed inset-0 pointer-events-none bg-cover bg-center z-0 transition-all duration-700"
           style={{ backgroundImage: `url(${customBg})` }}
         >
-          <div className="absolute inset-0 bg-black/65 backdrop-blur-[3px]" />
+          <div className="absolute inset-0 bg-black/70 backdrop-blur-[2px]" />
         </div>
       ) : (
         <div className="fixed inset-0 pointer-events-none overflow-hidden z-0">
@@ -472,7 +501,32 @@ export default function SowalAppleApp() {
         </div>
       )}
 
-      {/* Header */}
+      {/* Center VisionOS Dynamic Fluid Audio Waveform */}
+      {(isListening || isSpeaking) && (
+        <div className="fixed inset-x-0 bottom-24 flex items-center justify-center pointer-events-none z-40 transition-all duration-500">
+          <div className="flex items-center gap-1.5 px-6 py-2.5 rounded-full bg-black/60 border border-white/20 backdrop-blur-2xl shadow-2xl shadow-cyan-500/20 animate-in fade-in zoom-in-95">
+            {[40, 70, 100, 85, 60, 95, 120, 80, 55, 90, 65, 40].map((h, index) => (
+              <div
+                key={index}
+                className={`w-1 rounded-full transition-all duration-150 ${
+                  isListening 
+                    ? 'bg-gradient-to-t from-rose-500 to-amber-400' 
+                    : 'bg-gradient-to-t from-cyan-400 to-emerald-400'
+                }`}
+                style={{
+                  height: `${Math.max(6, (h * (isListening ? 0.4 : 0.35)) + Math.random() * 14)}px`,
+                  animation: `pulse ${0.4 + (index % 3) * 0.15}s infinite alternate`
+                }}
+              />
+            ))}
+            <span className="text-[11px] font-mono tracking-wider ml-2 text-white/80">
+              {isListening ? "LISTENING..." : "SYNTHESIZING..."}
+            </span>
+          </div>
+        </div>
+      )}
+
+      {/* Spatial Header */}
       <header className="relative z-30 sticky top-0 px-6 py-3.5 backdrop-blur-2xl bg-black/40 border-b border-white/[0.08] flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-emerald-400/20 via-cyan-400/20 to-white/10 border border-white/20 flex items-center justify-center backdrop-blur-md shadow-sm">
@@ -487,7 +541,7 @@ export default function SowalAppleApp() {
               <span className="text-xs text-white/80 font-medium">Ujjwal Jhajharia</span>
             </div>
             <p className="text-[10px] text-emerald-400/80 tracking-wide font-mono">
-              Custom Workspace • Soil Science & Agronomy
+              Spatial Viva Engine • Soil Science & Agronomy
             </p>
           </div>
         </div>
@@ -522,7 +576,7 @@ export default function SowalAppleApp() {
           <button
             onClick={() => bgInputRef.current?.click()}
             className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/[0.06] hover:bg-white/[0.12] border border-white/[0.1] text-xs text-white/80 transition active:scale-95"
-            title="Custom background wallpaper"
+            title="Upload custom wallpaper"
           >
             <ImageIcon size={13} className="text-cyan-400" />
             <span className="text-[11px]">Wallpaper</span>
@@ -571,7 +625,7 @@ export default function SowalAppleApp() {
         </div>
       </header>
 
-      {/* Main Workspace */}
+      {/* Main Spatial Grid */}
       <main className="relative z-10 flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8 grid grid-cols-1 lg:grid-cols-12 gap-6 h-[calc(100vh-4.2rem)]">
         
         {/* Left: Vault Panel */}
@@ -698,31 +752,39 @@ export default function SowalAppleApp() {
                         <div className="flex items-center gap-3 cursor-pointer flex-1" onClick={() => setViewingFile(file)}>
                           <FileText size={16} className={activeDocument?.id === file.id ? 'text-cyan-300' : 'text-cyan-400/80'} />
                           <div>
-                            <p className="text-xs font-medium text-white/90 truncate max-w-[150px]">{file.name}</p>
+                            <p className="text-xs font-medium text-white/90 truncate max-w-[130px]">{file.name}</p>
                             <span className="text-[10px] text-white/40">{file.size}</span>
                           </div>
                         </div>
                         
                         <div className="flex items-center gap-1.5">
                           <button
+                            onClick={() => generateFlashcards(file)}
+                            className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-white/[0.06] hover:bg-white/[0.12] border border-white/10 text-white/80 text-[10px] font-medium transition active:scale-95"
+                            title="Generate Flashcards"
+                          >
+                            <Layers2 size={11} className="text-amber-400" /> Cards
+                          </button>
+
+                          <button
                             onClick={() => triggerDocumentViva(file)}
                             className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-cyan-500/20 hover:bg-cyan-500/30 border border-cyan-500/40 text-cyan-300 text-[10px] font-medium transition active:scale-95"
                             title="Start Viva from this PDF"
                           >
-                            <PlayCircle size={12} /> Viva
+                            <PlayCircle size={11} /> Viva
                           </button>
                           
                           <button 
                             onClick={() => setViewingFile(file)}
                             className="p-1.5 rounded-lg bg-white/[0.04] hover:bg-white/[0.1] text-white/60 transition"
                           >
-                            <Eye size={13} />
+                            <Eye size={12} />
                           </button>
                           <button 
                             onClick={() => handleDeleteFile(file.id)} 
                             className="opacity-0 group-hover:opacity-100 p-1.5 text-white/30 hover:text-rose-400 transition"
                           >
-                            <Trash2 size={13} />
+                            <Trash2 size={12} />
                           </button>
                         </div>
                       </div>
@@ -739,7 +801,7 @@ export default function SowalAppleApp() {
           </div>
         </section>
 
-        {/* Right: Companion View */}
+        {/* Right: Spatial AI Studio View */}
         <section className="lg:col-span-7 flex flex-col h-full overflow-hidden">
           <div className="flex-1 bg-white/[0.03] border border-white/[0.08] rounded-3xl p-6 backdrop-blur-3xl flex flex-col justify-between overflow-hidden shadow-2xl relative">
             
@@ -883,6 +945,63 @@ export default function SowalAppleApp() {
         </section>
 
       </main>
+
+      {/* Interactive 3D Flip Flashcards Modal */}
+      {activeFlashcards && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-2xl flex items-center justify-center p-4 sm:p-6">
+          <div className="bg-[#141416]/95 border border-white/15 rounded-3xl w-full max-w-lg p-6 flex flex-col shadow-2xl backdrop-blur-3xl">
+            <div className="flex items-center justify-between pb-4 border-b border-white/10">
+              <div className="flex items-center gap-2">
+                <BookOpenCheck size={18} className="text-amber-400" />
+                <span className="text-xs font-semibold uppercase tracking-wider text-white/70">
+                  Card {flashcardIndex + 1} of {activeFlashcards.length}
+                </span>
+              </div>
+              <button 
+                onClick={() => setActiveFlashcards(null)} 
+                className="w-7 h-7 rounded-full bg-white/10 text-white/70 hover:text-white flex items-center justify-center"
+              >
+                <X size={14} />
+              </button>
+            </div>
+
+            <div 
+              onClick={() => setIsCardFlipped(!isCardFlipped)}
+              className="my-8 min-h-[200px] p-6 rounded-2xl bg-white/[0.04] hover:bg-white/[0.07] border border-white/15 cursor-pointer flex flex-col justify-between transition-all duration-300 text-center select-none"
+            >
+              <span className="text-[10px] font-mono tracking-widest uppercase text-white/40">
+                {isCardFlipped ? "ANSWER / KEY TAKEAWAY" : "QUESTION / CONCEPT (CLICK TO REVEAL)"}
+              </span>
+
+              <p className="text-sm sm:text-base font-medium text-white/90 my-auto leading-relaxed">
+                {isCardFlipped ? activeFlashcards[flashcardIndex].back : activeFlashcards[flashcardIndex].front}
+              </p>
+
+              <span className="text-[10px] text-cyan-400/80 font-mono">
+                {isCardFlipped ? "Tap to see question" : "Tap to flip"}
+              </span>
+            </div>
+
+            <div className="flex items-center justify-between pt-2">
+              <button
+                disabled={flashcardIndex === 0}
+                onClick={() => { setFlashcardIndex(prev => prev - 1); setIsCardFlipped(false); }}
+                className="flex items-center gap-1 px-4 py-2 rounded-full bg-white/[0.06] hover:bg-white/[0.12] disabled:opacity-20 text-xs text-white transition"
+              >
+                <ChevronLeft size={14} /> Previous
+              </button>
+
+              <button
+                disabled={flashcardIndex === activeFlashcards.length - 1}
+                onClick={() => { setFlashcardIndex(prev => prev + 1); setIsCardFlipped(false); }}
+                className="flex items-center gap-1 px-4 py-2 rounded-full bg-white text-black font-medium disabled:opacity-20 text-xs transition"
+              >
+                Next <ChevronRight size={14} />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Exam Result Scorecard Modal */}
       {examReport && (
