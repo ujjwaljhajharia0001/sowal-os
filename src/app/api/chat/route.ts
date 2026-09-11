@@ -1,4 +1,4 @@
-import { GoogleGenAI } from '@google/genai';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 import { NextResponse } from 'next/server';
 
 export async function POST(req: Request) {
@@ -14,31 +14,33 @@ export async function POST(req: Request) {
       );
     }
 
-    const ai = new GoogleGenAI({ apiKey });
+    const genAI = new GoogleGenerativeAI(apiKey);
     const { prompt, mood, documentContext, activeDocumentName, imageBase64 } = await req.json();
 
     const systemInstruction = `
 You are SOWAL, an elite AI study companion and viva examiner built for Ujjwal Jhajharia.
 Focus domains: Soil Science, Soil Colloids & CEC, Agronomy, Fertilizers, Weed Management, Plant Nutrition.
-Tone: Sharp, professional yet deeply supportive and grounded. Mix English and natural Hindi.
-For viva mode: Ask strictly 1 direct, conceptual question at a time. Evaluate student answers with pinpoint clarity.
+Tone: Sharp, professional yet deeply supportive and grounded. Mix English and natural conversational Hindi.
+For viva mode: Ask strictly 1 concise, conceptual question at a time. Evaluate student answers directly with precision.
 `;
 
-    let contents: any[] = [];
+    const model = genAI.getGenerativeModel({
+      model: 'gemini-1.5-flash',
+      systemInstruction: systemInstruction
+    });
+
+    let result;
 
     if (imageBase64) {
       const base64Data = imageBase64.includes(',') ? imageBase64.split(',')[1] : imageBase64;
-      contents = [
-        {
-          inlineData: {
-            mimeType: 'image/jpeg',
-            data: base64Data,
-          },
-        },
-        {
-          text: `Evaluate this handwritten note or diagram. Extract key definitions and ask 1 sharp conceptual viva question:\n\n${prompt || 'Scan and test me'}`,
-        },
-      ];
+      const imagePart = {
+        inlineData: {
+          data: base64Data,
+          mimeType: 'image/jpeg'
+        }
+      };
+      const textPrompt = `Evaluate this handwritten note or diagram. Extract key definitions and ask 1 sharp conceptual viva question:\n\n${prompt || 'Scan and test me'}`;
+      result = await model.generateContent([textPrompt, imagePart]);
     } else {
       const fullPrompt = `
 [Context: ${activeDocumentName || 'General Soil Science & Agronomy'}]
@@ -47,53 +49,35 @@ For viva mode: Ask strictly 1 direct, conceptual question at a time. Evaluate st
 
 User Query: ${prompt}
 `;
-      contents = [fullPrompt];
+      result = await model.generateContent(fullPrompt);
     }
 
-    // Models supported on @google/genai v1/v1beta
-    const candidateModels = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash-latest'];
-
-    let response: any = null;
-    let selectedModel = candidateModels[0];
-    let lastError: any = null;
-
-    for (const modelName of candidateModels) {
-      try {
-        selectedModel = modelName;
-        response = await ai.models.generateContent({
-          model: modelName,
-          contents,
-          config: {
-            systemInstruction,
-            temperature: 0.7,
-          },
-        });
-        if (response?.text) break;
-      } catch (err: any) {
-        lastError = err;
-        console.warn(`Model ${modelName} failed, attempting next candidate...`, err?.message || err);
-      }
-    }
-
-    if (!response?.text && lastError) {
-      throw lastError;
-    }
-
-    const reply = response?.text || "Main sun raha hoon Ujjwal, concept clear hai?";
+    const response = await result.response;
+    const reply = response.text() || "Main sun raha hoon Ujjwal, concept clear hai?";
 
     return NextResponse.json({
       display: reply,
       speech: reply,
-      engineUsed: selectedModel,
+      engineUsed: 'gemini-1.5-flash',
       retentionBoost: typeof prompt === 'string' && (prompt.toLowerCase().includes('viva') || prompt.toLowerCase().includes('exam')),
     });
 
   } catch (error: any) {
     console.error("Critical Generation Error:", error?.message || error);
     
+    if (error?.message?.includes('RESOURCE_EXHAUSTED') || error?.message?.includes('quota')) {
+      return NextResponse.json(
+        { 
+          display: "Google AI Studio Daily Quota Reached! Kuch der baad try karein ya fresh API key lagayein.", 
+          speech: "Quota reach ho gaya hai." 
+        },
+        { status: 429 }
+      );
+    }
+
     return NextResponse.json(
       { 
-        display: `Error: ${error?.message || "Generation error"}. Model endpoint verify karein.`, 
+        display: `Error: ${error?.message || "Generation error"}. Check console logs.`, 
         speech: "Request complete nahi ho payi." 
       },
       { status: 500 }
