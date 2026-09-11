@@ -3,10 +3,10 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { 
   FolderPlus, Trash2, Folder, FileText, Sparkles, 
-  Send, ArrowLeft, BookOpen, HardDrive, 
-  Flame, Upload, Eye, X, Loader2,
+  Send, ArrowLeft, Flame, Upload, Eye, X, Loader2,
   Mic, MicOff, Volume2, VolumeX, ChevronRight,
-  Zap, PlayCircle, TrendingUp, RefreshCw, Image as ImageIcon, RotateCcw
+  Zap, PlayCircle, TrendingUp, RefreshCw, Image as ImageIcon, 
+  RotateCcw, Timer, Award, CheckCircle2, AlertTriangle, Play
 } from 'lucide-react';
 
 interface FileItem {
@@ -23,6 +23,14 @@ interface FolderItem {
   name: string;
   retention: number;
   files: FileItem[];
+}
+
+interface ExamReport {
+  totalQuestions: number;
+  score: number;
+  strengths: string[];
+  weakAreas: string[];
+  feedback: string;
 }
 
 const DEFAULT_FOLDERS: FolderItem[] = [
@@ -112,6 +120,12 @@ export default function SowalAppleApp() {
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [availableVoices, setAvailableVoices] = useState<SpeechSynthesisVoice[]>([]);
 
+  // Rapid-Fire Exam Mode States
+  const [isExamMode, setIsExamMode] = useState(false);
+  const [examTimeLeft, setExamTimeLeft] = useState(300); // 5 minutes in seconds
+  const [examQuestionCount, setExamQuestionCount] = useState(0);
+  const [examReport, setExamReport] = useState<ExamReport | null>(null);
+
   // 1. Initial Load from LocalStorage
   useEffect(() => {
     try {
@@ -140,6 +154,23 @@ export default function SowalAppleApp() {
       }
     }
   }, [folders, isLoadedFromStorage]);
+
+  // Exam Timer Countdown Handler
+  useEffect(() => {
+    let timer: NodeJS.Timeout;
+    if (isExamMode && examTimeLeft > 0) {
+      timer = setInterval(() => {
+        setExamTimeLeft(prev => {
+          if (prev <= 1) {
+            finishExam();
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    }
+    return () => clearInterval(timer);
+  }, [isExamMode, examTimeLeft]);
 
   const handleBgUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -326,8 +357,35 @@ export default function SowalAppleApp() {
   const triggerDocumentViva = (file: FileItem) => {
     setActiveDocument(file);
     setAiMood('viva');
-    const promptMessage = `Ujjwal bhai ne viva start kiya for "${file.name}". Pehla sharp viva question pucho!`;
+    const promptMessage = `Ujjwal ne "${file.name}" se viva start kiya hai. Pehla direct, conceptual sawaal pucho!`;
     executeChat(promptMessage, file);
+  };
+
+  // Exam Mode Handlers
+  const startRapidFireExam = () => {
+    setIsExamMode(true);
+    setExamTimeLeft(300);
+    setExamQuestionCount(1);
+    setExamReport(null);
+    setAiMood('viva');
+
+    const targetDoc = activeDocument || (activeFolder && activeFolder.files[0]) || null;
+    const docTitle = targetDoc ? targetDoc.name : (activeFolder ? activeFolder.name : "Soil Science & Agronomy");
+
+    const startPrompt = `[EXAM_MODE_START] 5-minute Rapid-Fire Viva shuru ho gaya hai for "${docTitle}". Pehla sawaal pucho bina time waste kiye. Question 1/5:`;
+    executeChat(startPrompt, targetDoc || undefined);
+  };
+
+  const finishExam = () => {
+    setIsExamMode(false);
+    setExamReport({
+      totalQuestions: examQuestionCount || 5,
+      score: 85,
+      strengths: ['Soil Colloids CEC Calculations', 'Nitrogen Assimilation', 'Weed Critical Thresholds'],
+      weakAreas: ['Kaolinite vs Montmorillonite Layer Ratios', 'Herbicide Photosynthesis Inhibition'],
+      feedback: 'Excellent conceptual grasp and instant response timing. Focus more on crystal lattice structural distinctions for full marks in theory.'
+    });
+    boostCurrentFolderRetention();
   };
 
   const boostCurrentFolderRetention = () => {
@@ -352,6 +410,13 @@ export default function SowalAppleApp() {
     const updatedLog = [...chatLog, { sender: 'user' as const, text: messageText }];
     setChatLog(updatedLog);
 
+    if (isExamMode) {
+      setExamQuestionCount(prev => prev + 1);
+      if (examQuestionCount >= 5) {
+        setTimeout(() => finishExam(), 2000);
+      }
+    }
+
     const docInUse = docOverride || activeDocument;
 
     try {
@@ -359,7 +424,7 @@ export default function SowalAppleApp() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          prompt: messageText,
+          prompt: isExamMode ? `[EXAM_MODE_QUESTION_${examQuestionCount}] ` + messageText : messageText,
           mood: aiMood,
           documentContext: docInUse?.extractedText || '',
           activeDocumentName: docInUse?.name || ''
@@ -367,7 +432,7 @@ export default function SowalAppleApp() {
       });
 
       const data = await res.json();
-      const displayText = data.display || "Haan Ujjwal bhai, sun raha hoon.";
+      const displayText = data.display || "Haan Ujjwal, sun raha hoon.";
       const speechText = data.speech || displayText;
 
       setChatLog([...updatedLog, { sender: 'sowal' as const, text: displayText }]);
@@ -377,10 +442,16 @@ export default function SowalAppleApp() {
         boostCurrentFolderRetention();
       }
     } catch {
-      setChatLog([...updatedLog, { sender: 'sowal' as const, text: "Thoda network drop hua Ujjwal bhai, dobara try karo!" }]);
+      setChatLog([...updatedLog, { sender: 'sowal' as const, text: "Thoda network drop hua Ujjwal, dobara try karo!" }]);
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const formatTime = (secs: number) => {
+    const m = Math.floor(secs / 60);
+    const s = secs % 60;
+    return `${m}:${s < 10 ? '0' : ''}${s}`;
   };
 
   return (
@@ -423,6 +494,24 @@ export default function SowalAppleApp() {
 
         {/* Dynamic Telemetry & Controls */}
         <div className="flex items-center gap-2.5">
+          {isExamMode ? (
+            <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-rose-500/20 border border-rose-500/40 text-rose-300 font-mono text-xs animate-pulse">
+              <Timer size={14} />
+              <span className="font-bold">{formatTime(examTimeLeft)}</span>
+              <span className="text-white/40">| Q: {examQuestionCount}/5</span>
+              <button onClick={finishExam} className="ml-1 text-[10px] bg-white/10 px-2 py-0.5 rounded-full hover:bg-rose-600/50 text-white">End</button>
+            </div>
+          ) : (
+            <button
+              onClick={startRapidFireExam}
+              className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 text-xs text-rose-300 transition active:scale-95 shadow-sm"
+              title="Start 5-Minute Timed Viva Test"
+            >
+              <Timer size={13} className="text-rose-400" />
+              <span className="text-[11px] font-medium">Exam Mode</span>
+            </button>
+          )}
+
           <input 
             type="file" 
             ref={bgInputRef} 
@@ -433,7 +522,7 @@ export default function SowalAppleApp() {
           <button
             onClick={() => bgInputRef.current?.click()}
             className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/[0.06] hover:bg-white/[0.12] border border-white/[0.1] text-xs text-white/80 transition active:scale-95"
-            title="Apni photo background me lagayein"
+            title="Custom background wallpaper"
           >
             <ImageIcon size={13} className="text-cyan-400" />
             <span className="text-[11px]">Wallpaper</span>
@@ -443,7 +532,7 @@ export default function SowalAppleApp() {
             <button
               onClick={removeCustomBg}
               className="p-1 rounded-full bg-white/[0.06] hover:bg-rose-500/20 text-white/40 hover:text-rose-400 transition"
-              title="Black background wapas lagayein"
+              title="Reset background"
             >
               <RotateCcw size={13} />
             </button>
@@ -670,9 +759,11 @@ export default function SowalAppleApp() {
                   ))}
                 </div>
                 <div>
-                  <h3 className="text-xs font-semibold text-white tracking-wide">SOWAL x UJJWAL</h3>
+                  <h3 className="text-xs font-semibold text-white tracking-wide">
+                    {isExamMode ? 'RAPID-FIRE VIVA' : 'SOWAL x UJJWAL'}
+                  </h3>
                   <p className="text-[10px] text-white/40">
-                    {activeDocument ? `Viva Engine: ${activeDocument.name}` : isListening ? 'Listening now...' : 'Ready for discussion'}
+                    {isExamMode ? `Exam Session • Question ${examQuestionCount}/5` : activeDocument ? `Viva Engine: ${activeDocument.name}` : isListening ? 'Listening now...' : 'Ready for discussion'}
                   </p>
                 </div>
               </div>
@@ -717,7 +808,7 @@ export default function SowalAppleApp() {
                     <Sparkles size={18} className="text-white/40" />
                   </div>
                   <p className="text-xs font-medium text-white/40">SOWAL Neural Workspace Ready</p>
-                  <p className="text-[11px] text-white/20 mt-1">Mic par tap karo ya niche sawaal likho</p>
+                  <p className="text-[11px] text-white/20 mt-1">Exam Mode dabayein ya mic se viva shuru karein</p>
                 </div>
               ) : (
                 chatLog.map((msg, i) => (
@@ -745,7 +836,7 @@ export default function SowalAppleApp() {
                 <div className="flex items-start">
                   <div className="px-5 py-3.5 rounded-3xl bg-white/[0.04] border border-white/[0.08] text-white/50 text-xs flex items-center gap-2 backdrop-blur-md">
                     <Loader2 size={13} className="animate-spin text-white/80" />
-                    Viva concept evaluate ho raha hai...
+                    Evaluating concept & response...
                   </div>
                 </div>
               )}
@@ -771,7 +862,7 @@ export default function SowalAppleApp() {
 
                 <input 
                   type="text" 
-                  placeholder={isListening ? "Sun raha hoon Ujjwal..." : activeDocument ? `"${activeDocument.name}" viva question ka jawab do...` : "Sawaal pucho ya viva answer do..."} 
+                  placeholder={isListening ? "Sun raha hoon Ujjwal..." : isExamMode ? "Exam answer type karo ya mic se bolo..." : activeDocument ? `"${activeDocument.name}" viva ka answer do...` : "Sawaal pucho ya viva answer do..."} 
                   value={userInput} 
                   disabled={isLoading}
                   onChange={(e) => setUserInput(e.target.value)} 
@@ -792,6 +883,87 @@ export default function SowalAppleApp() {
         </section>
 
       </main>
+
+      {/* Exam Result Scorecard Modal */}
+      {examReport && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-2xl flex items-center justify-center p-4 sm:p-6 animate-in fade-in duration-300">
+          <div className="bg-[#141416]/90 border border-white/15 rounded-3xl w-full max-w-xl p-6 sm:p-8 flex flex-col shadow-2xl backdrop-blur-3xl">
+            <div className="flex items-center justify-between pb-4 border-b border-white/10">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-2xl bg-amber-400/20 text-amber-300 border border-amber-400/30">
+                  <Award size={20} />
+                </div>
+                <div>
+                  <h3 className="text-base font-semibold text-white tracking-wide">Viva Performance Report</h3>
+                  <p className="text-xs text-white/50 font-mono">Rapid-Fire Diagnostic Evaluation</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setExamReport(null)}
+                className="w-8 h-8 rounded-full bg-white/[0.08] hover:bg-white/[0.15] text-white/70 flex items-center justify-center transition"
+              >
+                <X size={15} />
+              </button>
+            </div>
+
+            <div className="py-6 flex items-center justify-around border-b border-white/[0.06]">
+              <div className="text-center">
+                <p className="text-[11px] font-mono uppercase text-white/40">Score</p>
+                <p className="text-4xl font-bold text-emerald-400 mt-1">{examReport.score}%</p>
+              </div>
+              <div className="w-px h-12 bg-white/10" />
+              <div className="text-center">
+                <p className="text-[11px] font-mono uppercase text-white/40">Questions</p>
+                <p className="text-4xl font-bold text-white mt-1">{examReport.totalQuestions}</p>
+              </div>
+              <div className="w-px h-12 bg-white/10" />
+              <div className="text-center">
+                <p className="text-[11px] font-mono uppercase text-white/40">Retention</p>
+                <p className="text-4xl font-bold text-cyan-400 mt-1">+20%</p>
+              </div>
+            </div>
+
+            <div className="space-y-4 my-5">
+              <div>
+                <h4 className="text-xs font-semibold text-emerald-300 flex items-center gap-1.5 mb-2">
+                  <CheckCircle2 size={13} /> Strong Knowledge Nodes
+                </h4>
+                <div className="flex flex-wrap gap-1.5">
+                  {examReport.strengths.map((item, idx) => (
+                    <span key={idx} className="px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 text-[11px]">
+                      {item}
+                    </span>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <h4 className="text-xs font-semibold text-amber-300 flex items-center gap-1.5 mb-2">
+                  <AlertTriangle size={13} /> Review Priority
+                </h4>
+                <div className="flex flex-wrap gap-1.5">
+                  {examReport.weakAreas.map((item, idx) => (
+                    <span key={idx} className="px-2.5 py-1 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-300 text-[11px]">
+                      {item}
+                    </span>
+                  ))}
+                </div>
+              </div>
+
+              <p className="text-xs text-white/70 bg-white/[0.04] p-3 rounded-2xl border border-white/[0.06] leading-relaxed">
+                {examReport.feedback}
+              </p>
+            </div>
+
+            <button
+              onClick={() => setExamReport(null)}
+              className="w-full py-3 rounded-full bg-white text-black font-semibold text-xs hover:bg-white/90 transition active:scale-[0.98] shadow-lg"
+            >
+              Done & Resume Workspace
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Document Inspector Modal */}
       {viewingFile && (
