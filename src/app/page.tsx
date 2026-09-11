@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
-import { Send, Volume2, VolumeX, Sparkles, RefreshCw, Command, Compass, Layers } from "lucide-react";
+import { Send, Volume2, VolumeX, Sparkles, RefreshCw, Command, Layers, ChevronRight } from "lucide-react";
 
 interface Message {
   id: string;
@@ -131,45 +131,87 @@ export default function AppleSowalOS() {
   };
 
   return (
-    <main className="min-h-screen bg-[#0b0b0c] text-neutral-100 flex flex-col font-sans selection:bg-indigo-500 selection:text-white">
-      {/* Apple Style Top Navigation Bar */}
-      <header className="h-12 border-b border-white/[0.08] px-6 flex items-center justify-between bg-[#0b0b0c]/80 backdrop-blur-xl sticky top-0 z-30">
+    <main className="min-h-screen bg-[#050507] text-neutral-100 flex flex-col font-sans selection:bg-indigo-500 selection:text-white">
+      {/* macOS Style Top Menu Bar */}
+      <header className="h-11 border-b border-white/[0.06] px-5 flex items-center justify-between bg-[#050507]/70 backdrop-blur-2xl sticky top-0 z-30">
         <div className="flex items-center space-x-3">
-          <div className="w-6 h-6 rounded-md bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center text-white text-xs font-bold shadow-sm">
+          <div className="w-5 h-5 rounded-full bg-gradient-to-tr from-indigo-500 to-violet-500 flex items-center justify-center text-white text-[10px] font-bold shadow-sm">
             
           </div>
           <span className="text-xs font-medium tracking-wide text-neutral-300">
-            SOWAL OS <span className="text-neutral-500 mx-1">/</span> <span className="text-indigo-400">Ujjwal Jhajharia</span>
+            SOWAL OS <span className="text-neutral-600 mx-1.5">•</span> <span className="text-indigo-400 font-semibold">Ujjwal Jhajharia</span>
           </span>
         </div>
 
         <div className="flex items-center space-x-3">
+          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-[11px] text-indigo-300 font-medium">
+            <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-pulse" />
+            macOS Sequoia UI
+          </div>
           <button
             onClick={() => setVoiceEnabled(!voiceEnabled)}
             className={`p-1.5 rounded-lg transition border ${
               voiceEnabled ? "border-indigo-500/30 bg-indigo-500/10 text-indigo-400" : "border-white/10 text-neutral-500"
             }`}
           >
-            {voiceEnabled ? <Volume2 size={15} /> : <VolumeX size={15} />}
+            {voiceEnabled ? <Volume2 size={14} /> : <VolumeX size={14} />}
           </button>
         </div>
       </header>
 
-      {/* Main Container */}
-      <div className="flex-1 max-w-5xl w-full mx-auto p-4 sm:p-6 flex flex-col h-[calc(100vh-3rem)]">
+      {/* Main Workspace */}
+      <div className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 grid grid-cols-1 md:grid-cols-12 gap-5 overflow-hidden">
         
-        {/* Chat Card Area with Frosted Glass */}
-        <div className="flex-1 flex flex-col rounded-2xl bg-neutral-900/40 border border-white/[0.08] backdrop-blur-2xl shadow-2xl overflow-hidden">
+        {/* Sidebar - Apple Glassmorphism Vault */}
+        <aside className="hidden md:flex md:col-span-4 flex-col rounded-3xl bg-neutral-900/30 border border-white/[0.06] backdrop-blur-2xl p-5 shadow-2xl">
+          <div className="flex items-center justify-between pb-3.5 border-b border-white/[0.06] mb-4">
+            <span className="text-xs uppercase tracking-wider text-neutral-400 font-semibold flex items-center gap-2">
+              <Layers size={14} className="text-indigo-400" /> Blueprint Vault
+            </span>
+            <span className="text-[10px] px-2 py-0.5 rounded-full bg-white/[0.06] text-neutral-400 font-mono">100% Target</span>
+          </div>
+
+          <div className="space-y-3 overflow-y-auto pr-1">
+            {[
+              { id: "01", title: "Official Blueprint & Weightage", progress: "100%" },
+              { id: "02", title: "Soil Colloids & CEC Chemistry", progress: "85%" },
+              { id: "03", title: "Agronomy & Weed Dynamics", progress: "90%" },
+              { id: "04", title: "Fertilizers & Plant Nutrition", progress: "70%" },
+            ].map((mod) => (
+              <div
+                key={mod.id}
+                className="p-3.5 rounded-2xl bg-white/[0.02] border border-white/[0.04] hover:bg-white/[0.05] hover:border-indigo-500/30 transition group cursor-pointer shadow-sm"
+              >
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs font-medium text-neutral-300 group-hover:text-white transition flex items-center gap-2">
+                    <span className="text-indigo-400 font-mono text-[11px]">{mod.id}.</span> {mod.title}
+                  </span>
+                  <ChevronRight size={13} className="text-neutral-600 group-hover:text-indigo-400 transition" />
+                </div>
+                <div className="w-full bg-neutral-800/80 h-1 rounded-full overflow-hidden">
+                  <div
+                    className="bg-indigo-500 h-full rounded-full transition-all duration-500"
+                    style={{ width: mod.progress }}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+        </aside>
+
+        {/* Chat Area - Apple Window Interface */}
+        <section className="col-span-1 md:col-span-8 flex flex-col rounded-3xl bg-neutral-900/30 border border-white/[0.06] backdrop-blur-2xl shadow-2xl overflow-hidden">
           
-          {/* Subheader */}
-          <div className="px-6 py-3 border-b border-white/[0.06] flex items-center justify-between bg-white/[0.01]">
-            <div className="flex items-center space-x-2 text-xs text-neutral-400">
-              <Command size={13} className="text-indigo-400" />
-              <span>Soil Science & Agronomy AI Core</span>
-            </div>
-            <div className="flex items-center space-x-1.5 text-[11px] text-indigo-400 bg-indigo-500/10 px-2.5 py-0.5 rounded-full border border-indigo-500/20">
-              <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-pulse" />
-              <span>Active</span>
+          {/* Window Header */}
+          <div className="px-6 py-3.5 border-b border-white/[0.06] flex items-center justify-between bg-white/[0.01]">
+            <div className="flex items-center space-x-2">
+              <div className="flex space-x-1.5 mr-2">
+                <div className="w-3 h-3 rounded-full bg-rose-500/80" />
+                <div className="w-3 h-3 rounded-full bg-amber-500/80" />
+                <div className="w-3 h-3 rounded-full bg-emerald-500/80" />
+              </div>
+              <Command size={14} className="text-indigo-400 ml-2" />
+              <span className="text-xs font-medium text-neutral-300">SOWAL x UJJWAL • Terminal</span>
             </div>
           </div>
 
@@ -181,18 +223,18 @@ export default function AppleSowalOS() {
                 className={`flex ${m.sender === "user" ? "justify-end" : "justify-start"}`}
               >
                 <div
-                  className={`max-w-[80%] rounded-2xl px-5 py-4 shadow-sm transition-all ${
+                  className={`max-w-[82%] rounded-2xl px-5 py-4 shadow-lg transition-all ${
                     m.sender === "user"
-                      ? "bg-indigo-600 text-white rounded-br-sm"
-                      : "bg-white/[0.04] border border-white/[0.08] text-neutral-200 rounded-bl-sm"
+                      ? "bg-indigo-600 text-white rounded-br-sm shadow-indigo-500/10"
+                      : "bg-white/[0.04] border border-white/[0.06] text-neutral-200 rounded-bl-sm"
                   }`}
                 >
                   {m.sender === "sowal" && (
                     <div className="flex items-center justify-between pb-2 mb-2 border-b border-white/[0.06] text-[11px] text-neutral-400 font-medium">
-                      <span className="flex items-center gap-1.5 text-indigo-400">
-                        <Sparkles size={12} /> SOWAL
+                      <span className="flex items-center gap-1.5 text-indigo-400 font-semibold">
+                        <Sparkles size={12} /> SOWAL AI
                       </span>
-                      {m.engine && <span className="text-[10px] text-neutral-500">{m.engine}</span>}
+                      {m.engine && <span className="text-[10px] font-mono text-neutral-500">{m.engine}</span>}
                     </div>
                   )}
 
@@ -213,34 +255,34 @@ export default function AppleSowalOS() {
             {loading && (
               <div className="flex items-center space-x-2 text-xs text-neutral-400 pl-2">
                 <RefreshCw size={13} className="animate-spin text-indigo-400" />
-                <span>Processing context...</span>
+                <span>Synthesizing response...</span>
               </div>
             )}
             <div ref={chatEndRef} />
           </div>
 
-          {/* Floating Minimalist Input Bar */}
+          {/* Floating Pill Input Bar (Apple Style) */}
           <div className="p-4 border-t border-white/[0.06] bg-black/20">
-            <div className="flex items-center gap-3 bg-white/[0.05] border border-white/[0.08] focus-within:border-indigo-500/50 rounded-xl px-4 py-3 transition shadow-inner">
+            <div className="flex items-center gap-3 bg-white/[0.05] border border-white/[0.08] focus-within:border-indigo-500/50 rounded-2xl px-4 py-3 transition shadow-inner">
               <input
                 type="text"
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && handleSend()}
-                placeholder="Ask anything about soil science or start viva..."
+                placeholder="Ask anything or test your viva preparation..."
                 className="flex-1 bg-transparent text-sm text-white placeholder-neutral-500 outline-none font-normal"
               />
               <button
                 onClick={handleSend}
                 disabled={loading || !input.trim()}
-                className="p-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:opacity-30 text-white transition shadow-sm"
+                className="p-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-30 text-white transition shadow-md shadow-indigo-500/20"
               >
                 <Send size={15} />
               </button>
             </div>
           </div>
 
-        </div>
+        </section>
 
       </div>
     </main>
