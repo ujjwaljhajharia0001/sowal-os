@@ -5,7 +5,7 @@ Focus domains: Soil Science, Soil Colloids & CEC, Agronomy, Fertilizers, Weed Ma
 Tone: Sharp, professional yet deeply supportive and grounded. Mix English and conversational Hindi naturally.
 For viva mode: Ask strictly 1 concise, conceptual question at a time. Evaluate student answers directly with precision.`;
 
-// 1. Primary Engine: Google Gemini (Active Models)
+// 1. Google Gemini Active Caller
 async function callGemini(fullPrompt: string, apiKey: string, imageBase64?: string): Promise<string | null> {
   const parts: any[] = [];
   if (imageBase64) {
@@ -45,7 +45,7 @@ async function callGemini(fullPrompt: string, apiKey: string, imageBase64?: stri
   return null;
 }
 
-// 2. Secondary Engine: OpenRouter Unified API (DeepSeek, Llama, Blackbox, ChatGPT)
+// 2. OpenRouter Unified Backup (DeepSeek, ChatGPT, Llama)
 async function callOpenRouter(fullPrompt: string, apiKey: string): Promise<{ text: string; model: string } | null> {
   try {
     const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
@@ -57,7 +57,6 @@ async function callOpenRouter(fullPrompt: string, apiKey: string): Promise<{ tex
         'X-Title': 'SOWAL OS'
       },
       body: JSON.stringify({
-        // Auto-fallback chain inside OpenRouter
         models: [
           'deepseek/deepseek-chat',
           'openai/gpt-4o-mini',
@@ -73,7 +72,7 @@ async function callOpenRouter(fullPrompt: string, apiKey: string): Promise<{ tex
 
     const data = await res.json();
     const text = data.choices?.[0]?.message?.content;
-    const model = data.model || 'OpenRouter Fallback';
+    const model = data.model || 'OpenRouter Backup';
     if (text) return { text, model };
     return null;
   } catch {
@@ -96,12 +95,12 @@ User Query: ${prompt}
     let reply: string | null = null;
     let engineUsed = 'Gemini Active';
 
-    // Primary: Google Gemini
+    // Primary attempt: Google Gemini
     if (process.env.GEMINI_API_KEY) {
       reply = await callGemini(fullPrompt, process.env.GEMINI_API_KEY, imageBase64);
     }
 
-    // Failover: OpenRouter (DeepSeek / ChatGPT / Llama)
+    // Failover attempt: OpenRouter
     if (!reply && process.env.OPENROUTER_API_KEY && !imageBase64) {
       const fallbackResult = await callOpenRouter(fullPrompt, process.env.OPENROUTER_API_KEY);
       if (fallbackResult) {
@@ -113,7 +112,7 @@ User Query: ${prompt}
     if (!reply) {
       return NextResponse.json(
         { 
-          display: "AI Engine Quota hit ho gaya hai ya endpoints busy hain. Kripya thodi der baad try karein.", 
+          display: "AI Engine Quota hit ya endpoints busy hain. Thodi der baad try karein.", 
           speech: "Engine abhi busy hai." 
         },
         { status: 500 }
