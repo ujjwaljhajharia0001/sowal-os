@@ -1,4 +1,3 @@
-import { GoogleGenerativeAI } from '@google/generative-ai';
 import { NextResponse } from 'next/server';
 
 export async function POST(req: Request) {
@@ -6,80 +5,77 @@ export async function POST(req: Request) {
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
       return NextResponse.json(
-        { 
-          display: "API Key missing! Vercel Settings -> Environment Variables me GEMINI_API_KEY set karo.", 
-          speech: "API Key missing hai." 
-        },
+        { display: "API Key missing! Vercel Settings me GEMINI_API_KEY check karein.", speech: "API Key missing hai." },
         { status: 500 }
       );
     }
 
-    const genAI = new GoogleGenerativeAI(apiKey);
     const { prompt, mood, documentContext, activeDocumentName, imageBase64 } = await req.json();
 
-    const systemInstruction = `
-You are SOWAL, an elite AI study companion and viva examiner built for Ujjwal Jhajharia.
+    const systemInstructionText = `You are SOWAL, an elite AI study companion and viva examiner built for Ujjwal Jhajharia.
 Focus domains: Soil Science, Soil Colloids & CEC, Agronomy, Fertilizers, Weed Management, Plant Nutrition.
-Tone: Sharp, professional yet deeply supportive and grounded. Mix English and natural conversational Hindi.
-For viva mode: Ask strictly 1 concise, conceptual question at a time. Evaluate student answers directly with precision.
-`;
+Tone: Sharp, professional yet supportive. Mix English and conversational Hindi naturally.
+For viva mode: Ask strictly 1 direct conceptual question at a time.`;
 
-    const model = genAI.getGenerativeModel({
-      model: 'gemini-1.5-flash',
-      systemInstruction: systemInstruction
-    });
-
-    let result;
+    const contents: any[] = [];
+    const parts: any[] = [];
 
     if (imageBase64) {
       const base64Data = imageBase64.includes(',') ? imageBase64.split(',')[1] : imageBase64;
-      const imagePart = {
+      parts.push({
         inlineData: {
-          data: base64Data,
-          mimeType: 'image/jpeg'
+          mimeType: 'image/jpeg',
+          data: base64Data
         }
-      };
-      const textPrompt = `Evaluate this handwritten note or diagram. Extract key definitions and ask 1 sharp conceptual viva question:\n\n${prompt || 'Scan and test me'}`;
-      result = await model.generateContent([textPrompt, imagePart]);
+      });
+      parts.push({
+        text: `Evaluate this note or diagram and ask 1 sharp conceptual viva question:\n\n${prompt || 'Scan and test me'}`
+      });
     } else {
-      const fullPrompt = `
-[Context: ${activeDocumentName || 'General Soil Science & Agronomy'}]
-[Document Snippet: ${documentContext || 'None'}]
-[Mode: ${mood || 'focused'}]
-
-User Query: ${prompt}
-`;
-      result = await model.generateContent(fullPrompt);
+      const fullPrompt = `[Context: ${activeDocumentName || 'Soil Science'}]\n[Document: ${documentContext || 'None'}]\n[Mood: ${mood || 'focused'}]\n\nUser: ${prompt}`;
+      parts.push({ text: fullPrompt });
     }
 
-    const response = await result.response;
-    const reply = response.text() || "Main sun raha hoon Ujjwal, concept clear hai?";
+    contents.push({ parts });
+
+    // Official v1 endpoint for gemini-1.5-flash
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        systemInstruction: { parts: [{ text: systemInstructionText }] },
+        contents,
+        generationConfig: {
+          temperature: 0.7
+        }
+      })
+    });
+
+    const data = await res.json();
+
+    if (!res.ok) {
+      console.error("Google API Error:", data);
+      return NextResponse.json(
+        { display: `Google Error: ${data.error?.message || 'Quota / API issue'}`, speech: "API response me error aaya." },
+        { status: res.status }
+      );
+    }
+
+    const reply = data.candidates?.[0]?.content?.parts?.[0]?.text || "Main sun raha hoon Ujjwal, boliye!";
 
     return NextResponse.json({
       display: reply,
       speech: reply,
       engineUsed: 'gemini-1.5-flash',
-      retentionBoost: typeof prompt === 'string' && (prompt.toLowerCase().includes('viva') || prompt.toLowerCase().includes('exam')),
+      retentionBoost: typeof prompt === 'string' && (prompt.toLowerCase().includes('viva') || prompt.toLowerCase().includes('exam'))
     });
 
   } catch (error: any) {
-    console.error("Critical Generation Error:", error?.message || error);
-    
-    if (error?.message?.includes('RESOURCE_EXHAUSTED') || error?.message?.includes('quota')) {
-      return NextResponse.json(
-        { 
-          display: "Google AI Studio Daily Quota Reached! Kuch der baad try karein ya fresh API key lagayein.", 
-          speech: "Quota reach ho gaya hai." 
-        },
-        { status: 429 }
-      );
-    }
-
+    console.error("Route Crash:", error);
     return NextResponse.json(
-      { 
-        display: `Error: ${error?.message || "Generation error"}. Check console logs.`, 
-        speech: "Request complete nahi ho payi." 
-      },
+      { display: `Error: ${error?.message || "Server crash"}`, speech: "Server error" },
       { status: 500 }
     );
   }
