@@ -50,36 +50,33 @@ User Query: ${prompt}
       contents = [fullPrompt];
     }
 
-    // Engine Priority: 1. Primary Engine -> 2. Secondary Engine (Fallback)
-    const PRIMARY_MODEL = 'gemini-2.5-flash';
-    const SECONDARY_MODEL = 'gemini-1.5-flash';
+    // Models supported on @google/genai v1/v1beta
+    const candidateModels = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash-latest'];
 
     let response: any = null;
-    let usedModel = PRIMARY_MODEL;
+    let selectedModel = candidateModels[0];
+    let lastError: any = null;
 
-    try {
-      // Step 1: Try Primary Model first
-      response = await ai.models.generateContent({
-        model: PRIMARY_MODEL,
-        contents,
-        config: {
-          systemInstruction,
-          temperature: 0.7,
-        },
-      });
-    } catch (primaryError: any) {
-      console.warn(`[Failover] Primary model (${PRIMARY_MODEL}) failed. Switching to Secondary (${SECONDARY_MODEL}). Reason:`, primaryError?.message || primaryError);
-      
-      // Step 2: Fallback to Secondary Model automatically
-      usedModel = SECONDARY_MODEL;
-      response = await ai.models.generateContent({
-        model: SECONDARY_MODEL,
-        contents,
-        config: {
-          systemInstruction,
-          temperature: 0.7,
-        },
-      });
+    for (const modelName of candidateModels) {
+      try {
+        selectedModel = modelName;
+        response = await ai.models.generateContent({
+          model: modelName,
+          contents,
+          config: {
+            systemInstruction,
+            temperature: 0.7,
+          },
+        });
+        if (response?.text) break;
+      } catch (err: any) {
+        lastError = err;
+        console.warn(`Model ${modelName} failed, attempting next candidate...`, err?.message || err);
+      }
+    }
+
+    if (!response?.text && lastError) {
+      throw lastError;
     }
 
     const reply = response?.text || "Main sun raha hoon Ujjwal, concept clear hai?";
@@ -87,26 +84,16 @@ User Query: ${prompt}
     return NextResponse.json({
       display: reply,
       speech: reply,
-      engineUsed: usedModel,
+      engineUsed: selectedModel,
       retentionBoost: typeof prompt === 'string' && (prompt.toLowerCase().includes('viva') || prompt.toLowerCase().includes('exam')),
     });
 
   } catch (error: any) {
-    console.error("Critical API Failover Error:", error?.message || error);
+    console.error("Critical Generation Error:", error?.message || error);
     
-    if (error?.message?.includes('RESOURCE_EXHAUSTED') || error?.message?.includes('quota')) {
-      return NextResponse.json(
-        { 
-          display: "Google AI Studio Daily Quota Reached! AI Studio me ek nayi API Key generate karke Vercel environment variables me update karein.", 
-          speech: "Quota reach ho gaya hai." 
-        },
-        { status: 429 }
-      );
-    }
-
     return NextResponse.json(
       { 
-        display: `Error: ${error?.message || "Server issue"}. Vercel Environment Variables verify karein.`, 
+        display: `Error: ${error?.message || "Generation error"}. Model endpoint verify karein.`, 
         speech: "Request complete nahi ho payi." 
       },
       { status: 500 }
