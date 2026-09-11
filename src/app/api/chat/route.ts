@@ -1,81 +1,121 @@
 import { NextResponse } from 'next/server';
 
-export async function POST(req: Request) {
-  try {
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) {
-      return NextResponse.json(
-        { display: "API Key missing! Vercel Environment Variables me GEMINI_API_KEY set karein.", speech: "API key configure nahi hai." },
-        { status: 500 }
-      );
-    }
-
-    const { prompt, mood, documentContext, activeDocumentName, imageBase64 } = await req.json();
-
-    const systemInstructionText = `You are SOWAL, an elite AI study companion and viva examiner built for Ujjwal Jhajharia.
+const SYSTEM_PROMPT = `You are SOWAL, an elite AI study companion and viva examiner built for Ujjwal Jhajharia.
 Focus domains: Soil Science, Soil Colloids & CEC, Agronomy, Fertilizers, Weed Management, Plant Nutrition.
 Tone: Sharp, professional yet deeply supportive and grounded. Mix English and conversational Hindi naturally.
 For viva mode: Ask strictly 1 concise, conceptual question at a time. Evaluate student answers directly with precision.`;
 
-    const parts: any[] = [];
+// 1. Primary Engine: Google Gemini (Active Models)
+async function callGemini(fullPrompt: string, apiKey: string, imageBase64?: string): Promise<string | null> {
+  const parts: any[] = [];
+  if (imageBase64) {
+    const cleanBase64 = imageBase64.includes(',') ? imageBase64.split(',')[1] : imageBase64;
+    parts.push({
+      inlineData: { mimeType: 'image/jpeg', data: cleanBase64 }
+    });
+    parts.push({ text: `Analyze this image note/diagram: ${fullPrompt}` });
+  } else {
+    parts.push({ text: fullPrompt });
+  }
 
-    if (imageBase64) {
-      const base64Data = imageBase64.includes(',') ? imageBase64.split(',')[1] : imageBase64;
-      parts.push({
-        inlineData: {
-          mimeType: 'image/jpeg',
-          data: base64Data
-        }
+  const endpoints = [
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${apiKey}`,
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-pro-preview:generateContent?key=${apiKey}`,
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`
+  ];
+
+  for (const url of endpoints) {
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts }],
+          systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
+          generationConfig: { temperature: 0.7 }
+        })
       });
-      parts.push({
-        text: `Evaluate this handwritten note or diagram. Extract key definitions and ask 1 sharp conceptual viva question:\n\n${prompt || 'Scan and test me'}`
-      });
-    } else {
-      const fullPrompt = `[Context: ${activeDocumentName || 'Soil Science & Agronomy'}]\n[Document: ${documentContext || 'None'}]\n[Mood: ${mood || 'focused'}]\n\nUser: ${prompt}`;
-      parts.push({ text: fullPrompt });
+      const data = await res.json();
+      const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (text) return text;
+    } catch {
+      continue;
+    }
+  }
+  return null;
+}
+
+// 2. Secondary Engine: OpenRouter Unified API (DeepSeek, Llama, Blackbox, ChatGPT)
+async function callOpenRouter(fullPrompt: string, apiKey: string): Promise<{ text: string; model: string } | null> {
+  try {
+    const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+        'HTTP-Referer': 'https://sowal-os.vercel.app',
+        'X-Title': 'SOWAL OS'
+      },
+      body: JSON.stringify({
+        // Auto-fallback chain inside OpenRouter
+        models: [
+          'deepseek/deepseek-chat',
+          'openai/gpt-4o-mini',
+          'meta-llama/llama-3.1-8b-instruct:free'
+        ],
+        messages: [
+          { role: 'system', content: SYSTEM_PROMPT },
+          { role: 'user', content: fullPrompt }
+        ],
+        temperature: 0.7
+      })
+    });
+
+    const data = await res.json();
+    const text = data.choices?.[0]?.message?.content;
+    const model = data.model || 'OpenRouter Fallback';
+    if (text) return { text, model };
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+export async function POST(req: Request) {
+  try {
+    const { prompt, mood, documentContext, activeDocumentName, imageBase64 } = await req.json();
+
+    const fullPrompt = `
+[Context: ${activeDocumentName || 'Soil Science & Agronomy'}]
+[Document Snippet: ${documentContext || 'None'}]
+[Mode: ${mood || 'focused'}]
+
+User Query: ${prompt}
+`;
+
+    let reply: string | null = null;
+    let engineUsed = 'Gemini Active';
+
+    // Primary: Google Gemini
+    if (process.env.GEMINI_API_KEY) {
+      reply = await callGemini(fullPrompt, process.env.GEMINI_API_KEY, imageBase64);
     }
 
-    // Google ke recommended aur active model identifiers
-    const modelsToTry = [
-      'gemini-3.1-pro-preview',
-      'gemini-3.6-flash',
-      'gemini-2.0-flash-exp',
-      'gemini-1.5-flash-latest'
-    ];
-
-    let reply = '';
-    let successModel = '';
-    let lastErrorDetails = '';
-
-    for (const modelName of modelsToTry) {
-      try {
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
-        const res = await fetch(url, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            contents: [{ parts }],
-            systemInstruction: { parts: [{ text: systemInstructionText }] },
-            generationConfig: { temperature: 0.7 }
-          })
-        });
-
-        const data = await res.json();
-        if (res.ok && data.candidates?.[0]?.content?.parts?.[0]?.text) {
-          reply = data.candidates[0].content.parts[0].text;
-          successModel = modelName;
-          break;
-        } else {
-          lastErrorDetails = data.error?.message || JSON.stringify(data);
-        }
-      } catch (err: any) {
-        lastErrorDetails = err?.message || String(err);
+    // Failover: OpenRouter (DeepSeek / ChatGPT / Llama)
+    if (!reply && process.env.OPENROUTER_API_KEY && !imageBase64) {
+      const fallbackResult = await callOpenRouter(fullPrompt, process.env.OPENROUTER_API_KEY);
+      if (fallbackResult) {
+        reply = fallbackResult.text;
+        engineUsed = fallbackResult.model;
       }
     }
 
     if (!reply) {
       return NextResponse.json(
-        { display: `Google API Error: ${lastErrorDetails}`, speech: "Google API connect nahi ho payi." },
+        { 
+          display: "AI Engine Quota hit ho gaya hai ya endpoints busy hain. Kripya thodi der baad try karein.", 
+          speech: "Engine abhi busy hai." 
+        },
         { status: 500 }
       );
     }
@@ -83,14 +123,14 @@ For viva mode: Ask strictly 1 concise, conceptual question at a time. Evaluate s
     return NextResponse.json({
       display: reply,
       speech: reply,
-      engineUsed: successModel,
+      engineUsed,
       retentionBoost: typeof prompt === 'string' && (prompt.toLowerCase().includes('viva') || prompt.toLowerCase().includes('exam'))
     });
 
   } catch (error: any) {
-    console.error("Route Crash:", error);
+    console.error("Router Crash:", error);
     return NextResponse.json(
-      { display: `Server Error: ${error?.message || "Internal failure"}`, speech: "Server error" },
+      { display: `Engine Error: ${error?.message || "Internal failure"}`, speech: "Server error" },
       { status: 500 }
     );
   }
