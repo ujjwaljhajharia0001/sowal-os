@@ -7,7 +7,7 @@ import {
   Mic, MicOff, Volume2, VolumeX, ChevronRight,
   Zap, PlayCircle, TrendingUp, RefreshCw, Image as ImageIcon, 
   RotateCcw, Timer, Award, CheckCircle2, AlertTriangle, Play,
-  Layers, Layers2, BookOpenCheck, ChevronLeft
+  Layers2, BookOpenCheck, ChevronLeft, Camera, BarChart3, Radio
 } from 'lucide-react';
 
 interface FileItem {
@@ -17,11 +17,14 @@ interface FileItem {
   url?: string;
   type: string;
   extractedText?: string;
+  isImage?: boolean;
+  base64?: string;
 }
 
 interface FolderItem {
   id: string;
   name: string;
+  weightage: number;
   retention: number;
   files: FileItem[];
 }
@@ -42,7 +45,8 @@ interface Flashcard {
 const DEFAULT_FOLDERS: FolderItem[] = [
   {
     id: 'f1',
-    name: '01. Official Syllabus & Blueprint',
+    name: '01. Official Blueprint & Weightage',
+    weightage: 20,
     retention: 94,
     files: [
       { 
@@ -50,34 +54,29 @@ const DEFAULT_FOLDERS: FolderItem[] = [
         name: 'ICAR_Curriculum_Syllabus.pdf', 
         size: '1.8 MB', 
         type: 'application/pdf',
-        extractedText: 'ICAR Agronomy and Soil Science core: Cation exchange capacity, soil horizon layers (O, A, E, B, C, R), macro and micro plant nutrients, weed competition critical periods.'
-      },
-      { 
-        id: 'file2', 
-        name: 'Semester_Weightage_Blueprint.pdf', 
-        size: '750 KB', 
-        type: 'application/pdf',
-        extractedText: 'Exam Weightage: Soil colloid chemistry (15 marks), Fertilizer calculations NPK (10 marks), Weed classification and herbicide chemistry (12 marks).'
+        extractedText: 'ICAR Core: Cation exchange capacity (CEC), soil horizons (O, A, E, B, C, R), macro and micro plant nutrients, weed competition critical periods.'
       }
     ]
   },
   {
     id: 'f2',
-    name: '02. Soil Science & Plant Nutrition',
-    retention: 58,
+    name: '02. Soil Colloids & CEC Chemistry',
+    weightage: 30,
+    retention: 65,
     files: [
       { 
         id: 'file3', 
         name: 'Soil_Colloids_and_CEC.pdf', 
         size: '1.2 MB', 
         type: 'application/pdf',
-        extractedText: 'Soil Colloids & CEC: Soil colloids carry net negative charges due to isomorphous substitution and broken edge bonds. Montmorillonite has 2:1 expanding crystal lattice with high CEC (80-100 cmol/kg), Kaolinite has 1:1 rigid lattice with low CEC (3-15 cmol/kg).'
-      },
+        extractedText: 'Soil Colloids & CEC: Negative charge via isomorphous substitution. Montmorillonite (2:1 expanding, CEC 80-100 cmol/kg), Kaolinite (1:1 non-expanding, CEC 3-15 cmol/kg).'
+      }
     ]
   },
   {
     id: 'f3',
     name: '03. Agronomy & Weed Dynamics',
+    weightage: 25,
     retention: 88,
     files: [
       { 
@@ -85,19 +84,20 @@ const DEFAULT_FOLDERS: FolderItem[] = [
         name: 'Weed_Management_Principles.pdf', 
         size: '2.1 MB', 
         type: 'application/pdf',
-        extractedText: 'Critical period of crop-weed competition is typically first 30-45 days after sowing. Selective vs non-selective herbicides. Mode of action: photosynthesis inhibition.'
+        extractedText: 'Critical weed competition period: first 30-45 days after sowing. Mode of action: Photosystem II inhibition and EPSPS enzyme blocks.'
       }
     ]
   },
   {
     id: 'f4',
-    name: '04. Rural Sociology & Extension',
-    retention: 100,
+    name: '04. Fertilizers & Plant Nutrition',
+    weightage: 25,
+    retention: 78,
     files: []
   }
 ];
 
-export default function SowalAppleApp() {
+export default function SowalSpatialStudio() {
   const [folders, setFolders] = useState<FolderItem[]>(DEFAULT_FOLDERS);
   const [activeFolderId, setActiveFolderId] = useState<string | null>(null);
   const [activeDocument, setActiveDocument] = useState<FileItem | null>(null);
@@ -108,6 +108,9 @@ export default function SowalAppleApp() {
   // Custom Background State
   const [customBg, setCustomBg] = useState<string | null>(null);
   const bgInputRef = useRef<HTMLInputElement>(null);
+
+  // Vision OCR State
+  const visionInputRef = useRef<HTMLInputElement>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const chatBottomRef = useRef<HTMLDivElement>(null);
@@ -137,10 +140,13 @@ export default function SowalAppleApp() {
   const [flashcardIndex, setFlashcardIndex] = useState(0);
   const [isCardFlipped, setIsCardFlipped] = useState(false);
 
-  // 1. Load LocalStorage
+  // Dynamic Island HUD State
+  const [hudMessage, setHudMessage] = useState<string>('Neural Co-Pilot Synchronized');
+
+  // 1. Initial Load
   useEffect(() => {
     try {
-      const savedFolders = localStorage.getItem('sowal_os_folders');
+      const savedFolders = localStorage.getItem('sowal_os_folders_v2');
       if (savedFolders) setFolders(JSON.parse(savedFolders));
       const savedBg = localStorage.getItem('sowal_os_custom_bg');
       if (savedBg) setCustomBg(savedBg);
@@ -151,18 +157,18 @@ export default function SowalAppleApp() {
     }
   }, []);
 
-  // 2. Save LocalStorage
+  // 2. Auto-save
   useEffect(() => {
     if (isLoadedFromStorage) {
       try {
-        localStorage.setItem('sowal_os_folders', JSON.stringify(folders));
+        localStorage.setItem('sowal_os_folders_v2', JSON.stringify(folders));
       } catch (e) {
         console.warn("Storage save error:", e);
       }
     }
   }, [folders, isLoadedFromStorage]);
 
-  // Exam Timer
+  // Exam Countdown Timer
   useEffect(() => {
     let timer: NodeJS.Timeout;
     if (isExamMode && examTimeLeft > 0) {
@@ -190,7 +196,7 @@ export default function SowalAppleApp() {
       try {
         localStorage.setItem('sowal_os_custom_bg', base64);
       } catch (err) {
-        console.warn("Wallpaper size large, saved for session.", err);
+        console.warn("Wallpaper stored in session.", err);
       }
     };
     reader.readAsDataURL(file);
@@ -262,12 +268,13 @@ export default function SowalAppleApp() {
 
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!SpeechRecognition) {
-      alert("Voice input ke liye Google Chrome use karein.");
+      alert("Voice speech ke liye Google Chrome use karein.");
       return;
     }
 
     if (isListening) {
       setIsListening(false);
+      setHudMessage('Voice input paused');
       return;
     }
 
@@ -277,10 +284,16 @@ export default function SowalAppleApp() {
       recognition.continuous = false;
       recognition.interimResults = false;
 
-      recognition.onstart = () => setIsListening(true);
+      recognition.onstart = () => {
+        setIsListening(true);
+        setHudMessage('Listening to Viva Voice...');
+      };
       recognition.onresult = (event: any) => {
         const transcript = event.results[0][0].transcript;
-        if (transcript) executeChat(transcript);
+        if (transcript) {
+          setHudMessage(`Captured: "${transcript.slice(0, 22)}..."`);
+          executeChat(transcript);
+        }
       };
       recognition.onerror = () => setIsListening(false);
       recognition.onend = () => setIsListening(false);
@@ -298,6 +311,7 @@ export default function SowalAppleApp() {
     const newFolder: FolderItem = {
       id: 'folder_' + Date.now(),
       name: newFolderName.trim(),
+      weightage: 20,
       retention: 100,
       files: []
     };
@@ -327,7 +341,7 @@ export default function SowalAppleApp() {
       try {
         extractedText = await file.text();
       } catch (err) {
-        console.warn("Text extraction error:", err);
+        console.warn("Text extraction warning:", err);
       }
     }
 
@@ -350,6 +364,21 @@ export default function SowalAppleApp() {
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
+  // OCR Vision Scanner Handler
+  const handleVisionScan = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      const base64 = reader.result as string;
+      setHudMessage("OCR: Parsing Handwritten Diagram...");
+      executeChat("Is handwritten note/diagram ko analyze karke concept explain karo aur iska direct viva sawaal pucho.", undefined, base64);
+    };
+    reader.readAsDataURL(file);
+    if (visionInputRef.current) visionInputRef.current.value = '';
+  };
+
   const handleDeleteFile = (fileId: string) => {
     if (!activeFolderId) return;
     setFolders(folders.map(f => {
@@ -364,27 +393,27 @@ export default function SowalAppleApp() {
   const triggerDocumentViva = (file: FileItem) => {
     setActiveDocument(file);
     setAiMood('viva');
-    const promptMessage = `Ujjwal ne "${file.name}" se viva start kiya hai. Pehla sharp, conceptual viva sawaal pucho!`;
-    executeChat(promptMessage, file);
+    setHudMessage(`Active Viva: ${file.name.slice(0, 16)}`);
+    executeChat(`Ujjwal ne "${file.name}" se viva shuru kiya. Pehla conceptual viva sawaal pucho!`, file);
   };
 
   const generateFlashcards = (file: FileItem) => {
     setActiveFlashcards([
       {
-        front: `What is the crystal lattice structure & CEC of Montmorillonite?`,
-        back: `Montmorillonite is a 2:1 expanding crystal lattice type with very high CEC (80-100 cmol/kg) due to isomorphic substitution.`
+        front: `What causes negative charge on 2:1 clay minerals like Montmorillonite?`,
+        back: `Isomorphous substitution (e.g. Al³⁺ replacing Si⁴⁺ in tetrahedral sheet or Mg²⁺ replacing Al³⁺ in octahedral sheet) creating permanent negative charges.`
       },
       {
-        front: `How does Kaolinite differ from Montmorillonite?`,
-        back: `Kaolinite is a 1:1 rigid non-expanding layer clay with low CEC (3-15 cmol/kg) and strong hydrogen bonding.`
+        front: `Compare CEC of Kaolinite vs Montmorillonite.`,
+        back: `Kaolinite has low CEC (3-15 cmol/kg) due to rigid 1:1 H-bonded structure. Montmorillonite has high CEC (80-100 cmol/kg) due to expanding 2:1 lattice.`
       },
       {
-        front: `What is the critical period of crop-weed competition?`,
-        back: `Typically the initial one-third of crop lifecycle (first 30 to 45 days after sowing) where yield loss is maximum.`
+        front: `Define Critical Period of Crop-Weed Competition (CPCWC).`,
+        back: `The minimum time period during crop lifecycle (usually initial 30-45 days) where weeds must be suppressed to avoid critical yield loss.`
       },
       {
-        front: `Name the master soil horizons in order.`,
-        back: `O (Organic), A (Surface/Topsoil), E (Eluviated), B (Illuviated/Subsoil), C (Parent Material), R (Bedrock).`
+        front: `Master Soil Horizons in order of depth.`,
+        back: `O (Organic litter), A (Mineral topsoil), E (Eluviated leached layer), B (Illuviated subsoil), C (Parent rock fragments), R (Hard bedrock).`
       }
     ]);
     setFlashcardIndex(0);
@@ -397,22 +426,23 @@ export default function SowalAppleApp() {
     setExamQuestionCount(1);
     setExamReport(null);
     setAiMood('viva');
+    setHudMessage('Rapid-Fire Exam Mode Active (5:00)');
 
     const targetDoc = activeDocument || (activeFolder && activeFolder.files[0]) || null;
-    const docTitle = targetDoc ? targetDoc.name : (activeFolder ? activeFolder.name : "Soil Science & Agronomy");
+    const docTitle = targetDoc ? targetDoc.name : (activeFolder ? activeFolder.name : "Soil Science & Agronomy Blueprint");
 
-    const startPrompt = `[EXAM_MODE_START] 5-minute Rapid-Fire Viva test shuru ho gaya for "${docTitle}". Question 1/5 pucho direct without introduction:`;
-    executeChat(startPrompt, targetDoc || undefined);
+    executeChat(`[EXAM_MODE_START] 5-minute Rapid-Fire Viva shuru for "${docTitle}". Question 1/5 pucho direct without introduction:`, targetDoc || undefined);
   };
 
   const finishExam = () => {
     setIsExamMode(false);
+    setHudMessage('Exam Completed • Diagnostic Generated');
     setExamReport({
       totalQuestions: examQuestionCount || 5,
-      score: 88,
-      strengths: ['Cation Exchange Calculations', 'Soil Horizon Stratification', 'Crop-Weed Thresholds'],
-      weakAreas: ['Clay Mineral Isomorphous Substitution Charges', 'Selective Herbicide Modes of Action'],
-      feedback: 'Outstanding conceptual clarity and fast verbal precision. Reinforce crystal lattice expandability for 100% board viva mastery.'
+      score: 92,
+      strengths: ['Soil Colloids CEC Calculations', 'Horizons Stratification', 'Weed Competition Dynamics'],
+      weakAreas: ['Clay Crystal Layer Expanding Ratios', 'Herbicide Site of Action Specifics'],
+      feedback: 'Excellent viva speed and conceptual precision. Blueprint targets are well-aligned.'
     });
     boostCurrentFolderRetention();
   };
@@ -430,13 +460,13 @@ export default function SowalAppleApp() {
     setTimeout(() => setRetentionNotification(null), 3500);
   };
 
-  const executeChat = async (messageText: string, docOverride?: FileItem) => {
-    if (!messageText.trim() || isLoading) return;
+  const executeChat = async (messageText: string, docOverride?: FileItem, imageBase64?: string) => {
+    if ((!messageText.trim() && !imageBase64) || isLoading) return;
 
     setUserInput('');
     setIsLoading(true);
 
-    const updatedLog = [...chatLog, { sender: 'user' as const, text: messageText }];
+    const updatedLog = [...chatLog, { sender: 'user' as const, text: imageBase64 ? "📷 [Uploaded Diagram / Handwritten Note for OCR Viva]" : messageText }];
     setChatLog(updatedLog);
 
     if (isExamMode) {
@@ -456,12 +486,13 @@ export default function SowalAppleApp() {
           prompt: isExamMode ? `[EXAM_MODE_QUESTION_${examQuestionCount}] ` + messageText : messageText,
           mood: aiMood,
           documentContext: docInUse?.extractedText || '',
-          activeDocumentName: docInUse?.name || ''
+          activeDocumentName: docInUse?.name || '',
+          imageBase64
         })
       });
 
       const data = await res.json();
-      const displayText = data.display || "Haan Ujjwal, sun raha hoon.";
+      const displayText = data.display || "Haan Ujjwal, concept clear hai?";
       const speechText = data.speech || displayText;
 
       setChatLog([...updatedLog, { sender: 'sowal' as const, text: displayText }]);
@@ -471,7 +502,7 @@ export default function SowalAppleApp() {
         boostCurrentFolderRetention();
       }
     } catch {
-      setChatLog([...updatedLog, { sender: 'sowal' as const, text: "Thoda network drop hua Ujjwal, dobara bolna!" }]);
+      setChatLog([...updatedLog, { sender: 'sowal' as const, text: "Thoda network drop hua Ujjwal, ek baar dobara bolo!" }]);
     } finally {
       setIsLoading(false);
     }
@@ -486,7 +517,7 @@ export default function SowalAppleApp() {
   return (
     <div className="min-h-screen bg-[#000000] text-[#f5f5f7] flex flex-col font-[-apple-system,BlinkMacSystemFont,'SF_Pro_Display','Segoe_UI',Roboto,sans-serif] selection:bg-white/20 relative overflow-hidden">
       
-      {/* Dynamic Background Layer */}
+      {/* Dynamic Background */}
       {customBg ? (
         <div 
           className="fixed inset-0 pointer-events-none bg-cover bg-center z-0 transition-all duration-700"
@@ -501,7 +532,22 @@ export default function SowalAppleApp() {
         </div>
       )}
 
-      {/* Center VisionOS Dynamic Fluid Audio Waveform */}
+      {/* Floating Dynamic Island HUD */}
+      <div className="fixed top-2.5 left-1/2 -translate-x-1/2 z-50 pointer-events-auto transition-all duration-300">
+        <div className="px-4 py-1.5 rounded-full bg-black/75 border border-white/20 backdrop-blur-2xl shadow-2xl flex items-center gap-3">
+          <div className="flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+            <span className="text-[11px] font-mono text-white/90">{hudMessage}</span>
+          </div>
+          {isExamMode && (
+            <span className="text-[11px] font-mono text-rose-400 font-bold border-l border-white/10 pl-2">
+              {formatTime(examTimeLeft)}
+            </span>
+          )}
+        </div>
+      </div>
+
+      {/* Center Dynamic Audio Waveform */}
       {(isListening || isSpeaking) && (
         <div className="fixed inset-x-0 bottom-24 flex items-center justify-center pointer-events-none z-40 transition-all duration-500">
           <div className="flex items-center gap-1.5 px-6 py-2.5 rounded-full bg-black/60 border border-white/20 backdrop-blur-2xl shadow-2xl shadow-cyan-500/20 animate-in fade-in zoom-in-95">
@@ -541,24 +587,48 @@ export default function SowalAppleApp() {
               <span className="text-xs text-white/80 font-medium">Ujjwal Jhajharia</span>
             </div>
             <p className="text-[10px] text-emerald-400/80 tracking-wide font-mono">
-              Spatial Viva Engine • Soil Science & Agronomy
+              Spatial Viva Engine • Soil Science & Agronomy Blueprint
             </p>
           </div>
         </div>
 
         {/* Dynamic Telemetry & Controls */}
-        <div className="flex items-center gap-2.5">
+        <div className="flex items-center gap-2">
+          {/* Blueprint Weightage Matrix Button */}
+          <div className="hidden sm:flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/[0.04] border border-white/[0.08] text-[11px] text-white/70 font-mono">
+            <BarChart3 size={12} className="text-emerald-400" />
+            <span>Blueprint: 100M Target</span>
+          </div>
+
+          {/* OCR Vision Note Scanner */}
+          <input 
+            type="file" 
+            ref={visionInputRef} 
+            onChange={handleVisionScan} 
+            className="hidden" 
+            accept="image/*"
+          />
+          <button
+            onClick={() => visionInputRef.current?.click()}
+            className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-indigo-500/20 hover:bg-indigo-500/30 border border-indigo-500/40 text-indigo-300 text-xs transition active:scale-95 shadow-sm"
+            title="Scan handwritten notes / diagrams for viva"
+          >
+            <Camera size={13} />
+            <span className="text-[11px] font-medium">Scan Note</span>
+          </button>
+
           {isExamMode ? (
-            <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-rose-500/20 border border-rose-500/40 text-rose-300 font-mono text-xs animate-pulse">
-              <Timer size={14} />
-              <span className="font-bold">{formatTime(examTimeLeft)}</span>
-              <span className="text-white/40">| Q: {examQuestionCount}/5</span>
-              <button onClick={finishExam} className="ml-1 text-[10px] bg-white/10 px-2 py-0.5 rounded-full hover:bg-rose-600/50 text-white">End</button>
-            </div>
+            <button 
+              onClick={finishExam} 
+              className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-rose-500/20 border border-rose-500/40 text-rose-300 font-mono text-xs animate-pulse"
+            >
+              <Timer size={13} />
+              <span>{formatTime(examTimeLeft)} • End</span>
+            </button>
           ) : (
             <button
               onClick={startRapidFireExam}
-              className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 text-xs text-rose-300 transition active:scale-95 shadow-sm"
+              className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 text-xs text-rose-300 transition active:scale-95"
               title="Start 5-Minute Timed Viva Test"
             >
               <Timer size={13} className="text-rose-400" />
@@ -575,38 +645,20 @@ export default function SowalAppleApp() {
           />
           <button
             onClick={() => bgInputRef.current?.click()}
-            className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/[0.06] hover:bg-white/[0.12] border border-white/[0.1] text-xs text-white/80 transition active:scale-95"
-            title="Upload custom wallpaper"
+            className="p-1.5 rounded-full bg-white/[0.06] hover:bg-white/[0.12] border border-white/[0.1] text-white/80 transition"
+            title="Custom wallpaper"
           >
-            <ImageIcon size={13} className="text-cyan-400" />
-            <span className="text-[11px]">Wallpaper</span>
+            <ImageIcon size={14} className="text-cyan-400" />
           </button>
 
           {customBg && (
             <button
               onClick={removeCustomBg}
-              className="p-1 rounded-full bg-white/[0.06] hover:bg-rose-500/20 text-white/40 hover:text-rose-400 transition"
+              className="p-1.5 rounded-full bg-white/[0.06] hover:bg-rose-500/20 text-white/40 hover:text-rose-400 transition"
               title="Reset background"
             >
               <RotateCcw size={13} />
             </button>
-          )}
-
-          {retentionNotification && (
-            <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-xs font-mono animate-bounce">
-              <TrendingUp size={12} />
-              <span>{retentionNotification}</span>
-            </div>
-          )}
-
-          {activeDocument && (
-            <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-cyan-500/10 border border-cyan-500/30 text-cyan-300 text-xs font-mono">
-              <Zap size={12} className="text-cyan-400 animate-pulse" />
-              <span>VIVA: {activeDocument.name.slice(0, 14)}...</span>
-              <button onClick={() => setActiveDocument(null)} className="ml-1 text-white/40 hover:text-white">
-                <X size={12} />
-              </button>
-            </div>
           )}
 
           <div 
@@ -619,16 +671,16 @@ export default function SowalAppleApp() {
             title="Click to boost retention"
           >
             <Flame size={12} className={lowestRetentionFolder?.retention < 70 ? "text-amber-400" : "text-emerald-400"} />
-            <span>{lowestRetentionFolder?.name.slice(4, 16)} ({lowestRetentionFolder?.retention}%)</span>
+            <span>{lowestRetentionFolder?.name.slice(4, 14)} ({lowestRetentionFolder?.retention}%)</span>
             <RefreshCw size={10} className="ml-0.5 opacity-60 hover:opacity-100" />
           </div>
         </div>
       </header>
 
-      {/* Main Spatial Grid */}
+      {/* Main Grid */}
       <main className="relative z-10 flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8 grid grid-cols-1 lg:grid-cols-12 gap-6 h-[calc(100vh-4.2rem)]">
         
-        {/* Left: Vault Panel */}
+        {/* Left: Vault & Blueprint Matrix */}
         <section className="lg:col-span-5 flex flex-col h-full overflow-hidden">
           <div className="flex-1 bg-white/[0.03] hover:bg-white/[0.04] transition border border-white/[0.08] rounded-3xl p-5 backdrop-blur-3xl flex flex-col justify-between overflow-hidden shadow-2xl">
             
@@ -644,7 +696,7 @@ export default function SowalAppleApp() {
                     </button>
                   )}
                   <h2 className="text-xs font-semibold uppercase tracking-wider text-white/50">
-                    {activeFolder ? activeFolder.name : "Knowledge Vault"}
+                    {activeFolder ? activeFolder.name : "Blueprint Vault"}
                   </h2>
                 </div>
 
@@ -653,7 +705,7 @@ export default function SowalAppleApp() {
                     onClick={() => setIsCreatingFolder(true)} 
                     className="flex items-center gap-1 px-3 py-1.5 rounded-full bg-white/[0.08] hover:bg-white/[0.15] text-white text-xs font-medium border border-white/10 transition active:scale-95"
                   >
-                    <FolderPlus size={13} /> New Folder
+                    <FolderPlus size={13} /> New Module
                   </button>
                 ) : (
                   <>
@@ -679,7 +731,7 @@ export default function SowalAppleApp() {
                   <input 
                     type="text" 
                     autoFocus 
-                    placeholder="Folder name..." 
+                    placeholder="Module / Chapter name..." 
                     value={newFolderName} 
                     onChange={(e) => setNewFolderName(e.target.value)} 
                     className="flex-1 bg-transparent text-xs text-white px-2 py-1 outline-none placeholder:text-white/30" 
@@ -689,7 +741,7 @@ export default function SowalAppleApp() {
                 </form>
               )}
 
-              {/* Folders List with LocalStorage Persistence */}
+              {/* Folders List */}
               <div className="mt-4 space-y-2.5 overflow-y-auto max-h-[calc(100vh-270px)] pr-1">
                 {!activeFolderId ? (
                   folders.map((folder) => (
@@ -704,7 +756,12 @@ export default function SowalAppleApp() {
                             <Folder size={16} />
                           </div>
                           <div>
-                            <h3 className="text-xs font-medium text-white group-hover:text-white transition">{folder.name}</h3>
+                            <div className="flex items-center gap-2">
+                              <h3 className="text-xs font-medium text-white group-hover:text-white transition">{folder.name}</h3>
+                              <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-white/[0.05] text-emerald-400">
+                                {folder.weightage}M
+                              </span>
+                            </div>
                             <span className="text-[11px] text-white/40">{folder.files.length} items</span>
                           </div>
                         </div>
@@ -752,7 +809,7 @@ export default function SowalAppleApp() {
                         <div className="flex items-center gap-3 cursor-pointer flex-1" onClick={() => setViewingFile(file)}>
                           <FileText size={16} className={activeDocument?.id === file.id ? 'text-cyan-300' : 'text-cyan-400/80'} />
                           <div>
-                            <p className="text-xs font-medium text-white/90 truncate max-w-[130px]">{file.name}</p>
+                            <p className="text-xs font-medium text-white/90 truncate max-w-[120px]">{file.name}</p>
                             <span className="text-[10px] text-white/40">{file.size}</span>
                           </div>
                         </div>
@@ -795,8 +852,8 @@ export default function SowalAppleApp() {
             </div>
 
             <div className="pt-3 border-t border-white/[0.04] text-[11px] text-white/30 flex justify-between font-mono">
-              <span>{folders.length} Modules Active</span>
-              <span>Auto-Saved</span>
+              <span>{folders.length} Blueprint Units</span>
+              <span>100% Synced</span>
             </div>
           </div>
         </section>
@@ -805,7 +862,7 @@ export default function SowalAppleApp() {
         <section className="lg:col-span-7 flex flex-col h-full overflow-hidden">
           <div className="flex-1 bg-white/[0.03] border border-white/[0.08] rounded-3xl p-6 backdrop-blur-3xl flex flex-col justify-between overflow-hidden shadow-2xl relative">
             
-            {/* Top Bar */}
+            {/* Top Controls */}
             <div className="flex items-center justify-between pb-4 border-b border-white/[0.06]">
               <div className="flex items-center gap-3">
                 <div className="flex items-center gap-1 h-5 px-2 rounded-full bg-white/[0.04] border border-white/[0.06]">
@@ -869,8 +926,8 @@ export default function SowalAppleApp() {
                   <div className="w-12 h-12 rounded-full bg-white/[0.02] border border-white/[0.06] flex items-center justify-center mb-3">
                     <Sparkles size={18} className="text-white/40" />
                   </div>
-                  <p className="text-xs font-medium text-white/40">SOWAL Neural Workspace Ready</p>
-                  <p className="text-[11px] text-white/20 mt-1">Exam Mode dabayein ya mic se viva shuru karein</p>
+                  <p className="text-xs font-medium text-white/40">SOWAL Spatial Co-Pilot Active</p>
+                  <p className="text-[11px] text-white/20 mt-1">Scan Note dabayein, viva shuru karein ya mic se bole</p>
                 </div>
               ) : (
                 chatLog.map((msg, i) => (
@@ -898,14 +955,14 @@ export default function SowalAppleApp() {
                 <div className="flex items-start">
                   <div className="px-5 py-3.5 rounded-3xl bg-white/[0.04] border border-white/[0.08] text-white/50 text-xs flex items-center gap-2 backdrop-blur-md">
                     <Loader2 size={13} className="animate-spin text-white/80" />
-                    Evaluating concept & response...
+                    Processing spatial neural evaluation...
                   </div>
                 </div>
               )}
               <div ref={chatBottomRef} />
             </div>
 
-            {/* Input Capsule */}
+            {/* Input Capsule with Voice Memo */}
             <form onSubmit={(e) => { e.preventDefault(); executeChat(userInput); }} className="pt-2">
               <div className="relative flex items-center bg-white/[0.04] hover:bg-white/[0.06] focus-within:bg-white/[0.07] border border-white/[0.1] focus-within:border-white/30 rounded-full p-1.5 transition duration-300 backdrop-blur-xl shadow-2xl">
                 
@@ -917,14 +974,14 @@ export default function SowalAppleApp() {
                       ? 'bg-rose-500 text-white shadow-lg shadow-rose-500/40 animate-pulse' 
                       : 'text-white/60 hover:text-white hover:bg-white/[0.08]'
                   }`}
-                  title="Mic se bolo"
+                  title="Speak Viva Answer / Voice Memo"
                 >
                   {isListening ? <MicOff size={16} /> : <Mic size={16} />}
                 </button>
 
                 <input 
                   type="text" 
-                  placeholder={isListening ? "Sun raha hoon Ujjwal..." : isExamMode ? "Exam answer type karo ya mic se bolo..." : activeDocument ? `"${activeDocument.name}" viva ka answer do...` : "Sawaal pucho ya viva answer do..."} 
+                  placeholder={isListening ? "Sun raha hoon Ujjwal..." : isExamMode ? "Exam answer type karo ya mic se bolo..." : activeDocument ? `"${activeDocument.name}" viva answer do...` : "Sawaal pucho, voice memo do ya viva test lo..."} 
                   value={userInput} 
                   disabled={isLoading}
                   onChange={(e) => setUserInput(e.target.value)} 
@@ -946,7 +1003,7 @@ export default function SowalAppleApp() {
 
       </main>
 
-      {/* Interactive 3D Flip Flashcards Modal */}
+      {/* 3D Flip Flashcards Modal */}
       {activeFlashcards && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-2xl flex items-center justify-center p-4 sm:p-6">
           <div className="bg-[#141416]/95 border border-white/15 rounded-3xl w-full max-w-lg p-6 flex flex-col shadow-2xl backdrop-blur-3xl">
@@ -970,7 +1027,7 @@ export default function SowalAppleApp() {
               className="my-8 min-h-[200px] p-6 rounded-2xl bg-white/[0.04] hover:bg-white/[0.07] border border-white/15 cursor-pointer flex flex-col justify-between transition-all duration-300 text-center select-none"
             >
               <span className="text-[10px] font-mono tracking-widest uppercase text-white/40">
-                {isCardFlipped ? "ANSWER / KEY TAKEAWAY" : "QUESTION / CONCEPT (CLICK TO REVEAL)"}
+                {isCardFlipped ? "ANSWER / HIGH-YIELD TAKEAWAY" : "QUESTION / CONCEPT (CLICK TO FLIP)"}
               </span>
 
               <p className="text-sm sm:text-base font-medium text-white/90 my-auto leading-relaxed">
@@ -1014,7 +1071,7 @@ export default function SowalAppleApp() {
                 </div>
                 <div>
                   <h3 className="text-base font-semibold text-white tracking-wide">Viva Performance Report</h3>
-                  <p className="text-xs text-white/50 font-mono">Rapid-Fire Diagnostic Evaluation</p>
+                  <p className="text-xs text-white/50 font-mono">Blueprint Diagnostics</p>
                 </div>
               </div>
               <button 

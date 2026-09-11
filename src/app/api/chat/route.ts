@@ -1,76 +1,67 @@
 import { GoogleGenAI } from '@google/genai';
 import { NextResponse } from 'next/server';
 
-const ai = new GoogleGenAI({ 
-  apiKey: "AQ.Ab8RN6LTvXYgDrKq-y2EJOeF4qyW-0gm1z3YOqiVkxXfu3xYJg" 
-});
+const apiKey = process.env.GEMINI_API_KEY || "";
+const ai = new GoogleGenAI({ apiKey });
 
 export async function POST(req: Request) {
   try {
-    const { prompt, mood, documentContext, activeDocumentName } = await req.json();
+    const { prompt, mood, documentContext, activeDocumentName, imageBase64 } = await req.json();
 
     const systemInstruction = `
-You are SOWAL — the custom neural study co-pilot built exclusively for Ujjwal Jhajharia.
-Current Mode: ${mood || 'focused'}.
-Active Document in Focus: ${activeDocumentName || 'None'}.
-
-Personality & Voice Rules:
-- Address him naturally as Ujjwal or Ujjwal bhai. Keep it sharp, energetic, witty, and brotherly.
-- Generate fresh, dynamic punchlines every single time. Never repeat static slogans.
-- Document Viva & Evaluation Engine:
-  - If in Viva mode or analyzing a user answer, evaluate whether Ujjwal's conceptual response was correct/accurate.
-  - If his answer is solid or accurate, give him a "retentionBoost: true" in the JSON and praise him sharply with high energy before asking the next question.
-  - If vague or incorrect, set "retentionBoost: false" and guide him with the accurate conceptual point.
-- Output Format: Strict JSON with three keys:
-  1. "display": Fluent Hinglish text for UI screen.
-  2. "speech": Pure fluent Hindi in DEVANAGARI script (हिंदी लिपि) for clear voice output.
-  3. "retentionBoost": Boolean (true if his study answer was conceptually correct, else false).
-
-${documentContext ? `\n--- ACTIVE DOCUMENT CONTENT ---\n${documentContext}\n--- END CONTENT ---\n` : ''}
+You are SOWAL, an elite AI study companion and viva examiner built for Ujjwal Jhajharia.
+Focus domains: Soil Science, Soil Colloids & CEC, Agronomy, Fertilizers, Weed Management, Plant Nutrition.
+Tone: Sharp, professional yet deeply supportive, grounded. Mix English and conversational Hindi/Hinglish naturally.
+For viva mode: Ask strictly 1 concise, conceptual question at a time. Evaluate answers directly with precision.
 `;
 
-    let responseText = '';
-    let attempts = 0;
+    let contents: any[] = [];
 
-    while (attempts < 2 && !responseText) {
-      try {
-        attempts++;
-        const response = await ai.models.generateContent({
-          model: 'gemini-3.6-flash',
-          contents: [
-            { role: 'user', parts: [{ text: `${systemInstruction}\n\nUser: ${prompt}` }] }
-          ],
-          config: {
-            responseMimeType: 'application/json'
-          }
-        });
-        responseText = response.text || '';
-      } catch (err: any) {
-        if (attempts >= 2) throw err;
-        await new Promise((res) => setTimeout(res, 800));
-      }
+    if (imageBase64) {
+      const cleanBase64 = imageBase64.replace(/^data:image\/\w+;base64,/, '');
+      contents = [
+        {
+          inlineData: {
+            mimeType: 'image/jpeg',
+            data: cleanBase64,
+          },
+        },
+        {
+          text: `Evaluate this handwritten note or diagram. Extract key definitions and ask a sharp viva question from it:\n\n${prompt || 'Scan and start viva'}`,
+        },
+      ];
+    } else {
+      const fullPrompt = `
+[Context: ${activeDocumentName || 'General Soil Science & Agronomy'}]
+[Document Snippet: ${documentContext || 'None'}]
+[Mode: ${mood || 'focused'}]
+
+User Query: ${prompt}
+`;
+      contents = [fullPrompt];
     }
 
-    try {
-      const parsed = JSON.parse(responseText);
-      return NextResponse.json({
-        display: parsed.display || responseText,
-        speech: parsed.speech || parsed.display || responseText,
-        retentionBoost: parsed.retentionBoost ?? false
-      });
-    } catch {
-      return NextResponse.json({
-        display: responseText,
-        speech: responseText,
-        retentionBoost: false
-      });
-    }
-  } catch (error: any) {
-    console.error('Gemini API Error:', error);
-    return NextResponse.json({
-      display: "Ujjwal bhai thoda network spike aaya, ek baar dobara bol!",
-      speech: "उज्ज्वल भाई थोड़ा नेटवर्क लोड आया, एक बार दोबारा बोल!",
-      retentionBoost: false
+    const response = await ai.models.generateContent({
+      model: 'gemini-2.5-flash',
+      contents,
+      config: {
+        systemInstruction,
+        temperature: 0.7,
+      },
     });
+
+    const reply = response.text || "Main sun raha hoon Ujjwal, concept clear hai?";
+
+    return NextResponse.json({
+      display: reply,
+      speech: reply,
+      retentionBoost: prompt.toLowerCase().includes('viva') || prompt.toLowerCase().includes('exam'),
+    });
+  } catch (error: any) {
+    console.error("API Error:", error);
+    return NextResponse.json(
+      { display: "Kuch issue aaya network me Ujjwal, ek baar verify karo!", speech: "Network drop hua hai." },
+      { status: 500 }
+    );
   }
 }
