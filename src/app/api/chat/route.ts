@@ -5,7 +5,7 @@ export async function POST(req: Request) {
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
       return NextResponse.json(
-        { display: "API Key missing! Vercel Settings me GEMINI_API_KEY check karein.", speech: "API Key missing hai." },
+        { display: "API Key missing! Vercel Environment Variables me GEMINI_API_KEY set karein.", speech: "API key configure nahi hai." },
         { status: 500 }
       );
     }
@@ -14,10 +14,9 @@ export async function POST(req: Request) {
 
     const systemInstructionText = `You are SOWAL, an elite AI study companion and viva examiner built for Ujjwal Jhajharia.
 Focus domains: Soil Science, Soil Colloids & CEC, Agronomy, Fertilizers, Weed Management, Plant Nutrition.
-Tone: Sharp, professional yet supportive. Mix English and conversational Hindi naturally.
-For viva mode: Ask strictly 1 direct conceptual question at a time.`;
+Tone: Sharp, professional yet deeply supportive and grounded. Mix English and conversational Hindi naturally.
+For viva mode: Ask strictly 1 concise, conceptual question at a time. Evaluate student answers with pinpoint precision.`;
 
-    const contents: any[] = [];
     const parts: any[] = [];
 
     if (imageBase64) {
@@ -29,53 +28,69 @@ For viva mode: Ask strictly 1 direct conceptual question at a time.`;
         }
       });
       parts.push({
-        text: `Evaluate this note or diagram and ask 1 sharp conceptual viva question:\n\n${prompt || 'Scan and test me'}`
+        text: `Evaluate this handwritten note or diagram. Extract key definitions and ask 1 sharp conceptual viva question:\n\n${prompt || 'Scan and test me'}`
       });
     } else {
-      const fullPrompt = `[Context: ${activeDocumentName || 'Soil Science'}]\n[Document: ${documentContext || 'None'}]\n[Mood: ${mood || 'focused'}]\n\nUser: ${prompt}`;
+      const fullPrompt = `[Context: ${activeDocumentName || 'Soil Science & Agronomy'}]\n[Document: ${documentContext || 'None'}]\n[Mood: ${mood || 'focused'}]\n\nUser: ${prompt}`;
       parts.push({ text: fullPrompt });
     }
 
-    contents.push({ parts });
+    // Google API ke active valid model names
+    const modelsToTry = [
+      'gemini-2.5-flash',
+      'gemini-2.0-flash',
+      'gemini-1.5-flash-8b',
+      'gemini-2.5-pro'
+    ];
 
-    // Official v1 endpoint for gemini-1.5-flash
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+    let reply = '';
+    let successModel = '';
+    let lastErrorDetails = '';
 
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        systemInstruction: { parts: [{ text: systemInstructionText }] },
-        contents,
-        generationConfig: {
-          temperature: 0.7
+    for (const modelName of modelsToTry) {
+      try {
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ parts }],
+            systemInstruction: { parts: [{ text: systemInstructionText }] },
+            generationConfig: { temperature: 0.7 }
+          })
+        });
+
+        const data = await res.json();
+        if (res.ok && data.candidates?.[0]?.content?.parts?.[0]?.text) {
+          reply = data.candidates[0].content.parts[0].text;
+          successModel = modelName;
+          break;
+        } else {
+          lastErrorDetails = data.error?.message || JSON.stringify(data);
         }
-      })
-    });
-
-    const data = await res.json();
-
-    if (!res.ok) {
-      console.error("Google API Error:", data);
-      return NextResponse.json(
-        { display: `Google Error: ${data.error?.message || 'Quota / API issue'}`, speech: "API response me error aaya." },
-        { status: res.status }
-      );
+      } catch (err: any) {
+        lastErrorDetails = err?.message || String(err);
+      }
     }
 
-    const reply = data.candidates?.[0]?.content?.parts?.[0]?.text || "Main sun raha hoon Ujjwal, boliye!";
+    if (!reply) {
+      return NextResponse.json(
+        { display: `Google API Model Issue: ${lastErrorDetails}`, speech: "Google API response nahi de rahi hai." },
+        { status: 500 }
+      );
+    }
 
     return NextResponse.json({
       display: reply,
       speech: reply,
-      engineUsed: 'gemini-1.5-flash',
+      engineUsed: successModel,
       retentionBoost: typeof prompt === 'string' && (prompt.toLowerCase().includes('viva') || prompt.toLowerCase().includes('exam'))
     });
 
   } catch (error: any) {
     console.error("Route Crash:", error);
     return NextResponse.json(
-      { display: `Error: ${error?.message || "Server crash"}`, speech: "Server error" },
+      { display: `Server Error: ${error?.message || "Internal failure"}`, speech: "Server error" },
       { status: 500 }
     );
   }
