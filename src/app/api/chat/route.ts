@@ -15,7 +15,7 @@ export async function POST(req: Request) {
     const systemInstructionText = `You are SOWAL, an elite AI study companion and viva examiner built for Ujjwal Jhajharia.
 Focus domains: Soil Science, Soil Colloids & CEC, Agronomy, Fertilizers, Weed Management, Plant Nutrition.
 Tone: Sharp, professional yet deeply supportive and grounded. Mix English and conversational Hindi naturally.
-For viva mode: Ask strictly 1 concise, conceptual question at a time. Evaluate student answers with pinpoint precision.`;
+For viva mode: Ask strictly 1 concise, conceptual question at a time. Evaluate student answers directly with precision.`;
 
     const parts: any[] = [];
 
@@ -35,12 +35,12 @@ For viva mode: Ask strictly 1 concise, conceptual question at a time. Evaluate s
       parts.push({ text: fullPrompt });
     }
 
-    // Google API ke active valid model names
+    // Google ke recommended aur active model identifiers
     const modelsToTry = [
-      'gemini-2.5-flash',
-      'gemini-2.0-flash',
-      'gemini-1.5-flash-8b',
-      'gemini-2.5-pro'
+      'gemini-3.1-pro-preview',
+      'gemini-3.6-flash',
+      'gemini-2.0-flash-exp',
+      'gemini-1.5-flash-latest'
     ];
 
     let reply = '';
@@ -75,7 +75,7 @@ For viva mode: Ask strictly 1 concise, conceptual question at a time. Evaluate s
 
     if (!reply) {
       return NextResponse.json(
-        { display: `Google API Model Issue: ${lastErrorDetails}`, speech: "Google API response nahi de rahi hai." },
+        { display: `Google API Error: ${lastErrorDetails}`, speech: "Google API connect nahi ho payi." },
         { status: 500 }
       );
     }
