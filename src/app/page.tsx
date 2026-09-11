@@ -28,7 +28,7 @@ export default function SowalOS() {
     {
       id: "welcome",
       sender: "sowal",
-      text: "SOWAL OS active hai Ujjwal. Aaj Soil Science, Colloids & CEC ya Agronomy me kis topic ka viva test lena hai?",
+      text: "<b>Hello Ujjwal!</b> Welcome to your Soil Science study session.<br>I am <b>SOWAL</b>, your viva examiner and study companion.<br>Ready to test your knowledge or break down complex concepts.",
       speechText: "SOWAL OS active hai Ujjwal. Aaj kis topic par test lena hai?",
       engine: "Gemini 3.6 Flash"
     }
@@ -36,7 +36,6 @@ export default function SowalOS() {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [voiceEnabled, setVoiceEnabled] = useState(true);
-  const [isListening, setIsListening] = useState(false);
   const [activeMood, setActiveMood] = useState<"Focused" | "Empathetic" | "Viva">("Viva");
 
   const chatEndRef = useRef<HTMLDivElement>(null);
@@ -49,7 +48,7 @@ export default function SowalOS() {
   const speakText = (text: string) => {
     if (!voiceEnabled || typeof window === "undefined" || !("speechSynthesis" in window)) return;
     window.speechSynthesis.cancel();
-    const clean = text.replace(/[*#_`$|]/g, "").trim();
+    const clean = text.replace(/[*#_`$|<>\/]/g, "").trim();
     const utterance = new SpeechSynthesisUtterance(clean);
     utterance.rate = 1.05;
     utterance.pitch = 1.0;
@@ -71,11 +70,10 @@ export default function SowalOS() {
       }
     ]);
 
-    // Voice trigger immediately on speech line
     if (speechText) speakText(speechText);
 
     let currentIndex = 0;
-    const chunkSize = Math.max(3, Math.ceil(fullText.length / 45)); // smooth dynamic chunking
+    const chunkSize = Math.max(3, Math.ceil(fullText.length / 45));
     const interval = setInterval(() => {
       currentIndex += chunkSize;
       if (currentIndex >= fullText.length) {
@@ -147,39 +145,31 @@ export default function SowalOS() {
     }
   };
 
-  // Clean Markdown & Text Renderer
+  // Clean HTML & Markdown Renderer
   const renderFormattedText = (raw: string) => {
-    const lines = raw.split("\n");
+    const sanitized = raw.replace(/<br\s*[\/]?>/gi, "\n");
+    const lines = sanitized.split("\n");
+
     return (
       <div className="space-y-2 leading-relaxed text-[14.5px]">
         {lines.map((line, idx) => {
           const trimmed = line.trim();
           if (!trimmed) return <div key={idx} className="h-1" />;
 
-          // Bullet points
           if (trimmed.startsWith("* ") || trimmed.startsWith("- ") || trimmed.startsWith("• ")) {
             return (
               <div key={idx} className="flex items-start space-x-2 pl-1">
                 <span className="text-emerald-400 mt-1 font-bold">•</span>
                 <span className="flex-1 text-neutral-200">
-                  {formatInline(trimmed.replace(/^[*•-]\s*/, ""))}
+                  {parseInlineHTML(trimmed.replace(/^[*•-]\s*/, ""))}
                 </span>
               </div>
             );
           }
 
-          // Bold Title Line / Headings
-          if (trimmed.startsWith("###") || trimmed.startsWith("##") || (trimmed.startsWith("**") && trimmed.endsWith("**"))) {
-            return (
-              <p key={idx} className="font-semibold text-emerald-300 tracking-wide text-[15px] pt-1">
-                {formatInline(trimmed.replace(/^#+\s*/, ""))}
-              </p>
-            );
-          }
-
           return (
             <p key={idx} className="text-neutral-200">
-              {formatInline(trimmed)}
+              {parseInlineHTML(trimmed)}
             </p>
           );
         })}
@@ -187,14 +177,14 @@ export default function SowalOS() {
     );
   };
 
-  // Inline bold and code tag formatter
-  const formatInline = (str: string) => {
-    const parts = str.split(/(\*\*[^*]+\*\*)/g);
+  const parseInlineHTML = (str: string) => {
+    const parts = str.split(/(<b>.*?<\/b>|\*\*.*?\*\*)/g);
     return parts.map((part, i) => {
-      if (part.startsWith("**") && part.endsWith("**")) {
+      if ((part.startsWith("<b>") && part.endsWith("<\/b>")) || (part.startsWith("**") && part.endsWith("**"))) {
+        const content = part.startsWith("<b>") ? part.slice(3, -4) : part.slice(2, -2);
         return (
           <strong key={i} className="text-white font-semibold">
-            {part.slice(2, -2)}
+            {content}
           </strong>
         );
       }
