@@ -112,7 +112,7 @@ export default function SowalAppleApp() {
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [availableVoices, setAvailableVoices] = useState<SpeechSynthesisVoice[]>([]);
 
-  // 1. Initial Load from LocalStorage (Folders & Custom Wallpaper)
+  // 1. Initial Load from LocalStorage
   useEffect(() => {
     try {
       const savedFolders = localStorage.getItem('sowal_os_folders');
@@ -130,7 +130,7 @@ export default function SowalAppleApp() {
     }
   }, []);
 
-  // 2. Auto-save Folders to LocalStorage
+  // 2. Auto-save to LocalStorage
   useEffect(() => {
     if (isLoadedFromStorage) {
       try {
@@ -141,7 +141,6 @@ export default function SowalAppleApp() {
     }
   }, [folders, isLoadedFromStorage]);
 
-  // Wallpaper Upload Handler
   const handleBgUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -153,7 +152,7 @@ export default function SowalAppleApp() {
       try {
         localStorage.setItem('sowal_os_custom_bg', base64);
       } catch (err) {
-        console.warn("Wallpaper image too large for storage, active for this session.", err);
+        console.warn("Wallpaper size large, active for current session only.", err);
       }
     };
     reader.readAsDataURL(file);
@@ -387,13 +386,12 @@ export default function SowalAppleApp() {
   return (
     <div className="min-h-screen bg-[#000000] text-[#f5f5f7] flex flex-col font-[-apple-system,BlinkMacSystemFont,'SF_Pro_Display','Segoe_UI',Roboto,sans-serif] selection:bg-white/20 relative overflow-hidden">
       
-      {/* Dynamic Background: Custom Wallpaper or Ambient Apple Glow */}
+      {/* Background Layer */}
       {customBg ? (
         <div 
           className="fixed inset-0 pointer-events-none bg-cover bg-center z-0 transition-all duration-700"
           style={{ backgroundImage: `url(${customBg})` }}
         >
-          {/* Frosted VisionOS overlay so text stays 100% sharp */}
           <div className="absolute inset-0 bg-black/65 backdrop-blur-[3px]" />
         </div>
       ) : (
@@ -423,10 +421,8 @@ export default function SowalAppleApp() {
           </div>
         </div>
 
-        {/* Dynamic Telemetry & Wallpaper Switcher */}
+        {/* Dynamic Telemetry & Controls */}
         <div className="flex items-center gap-2.5">
-          
-          {/* Custom Wallpaper Upload / Reset Buttons */}
           <input 
             type="file" 
             ref={bgInputRef} 
@@ -447,7 +443,7 @@ export default function SowalAppleApp() {
             <button
               onClick={removeCustomBg}
               className="p-1 rounded-full bg-white/[0.06] hover:bg-rose-500/20 text-white/40 hover:text-rose-400 transition"
-              title="Black Skin wapas lagayein"
+              title="Black background wapas lagayein"
             >
               <RotateCcw size={13} />
             </button>
@@ -505,7 +501,7 @@ export default function SowalAppleApp() {
                     </button>
                   )}
                   <h2 className="text-xs font-semibold uppercase tracking-wider text-white/50">
-                    {activeFolder ? activeFolder.name : "Ujjwal's Knowledge Vault"}
+                    {activeFolder ? activeFolder.name : "Knowledge Vault"}
                   </h2>
                 </div>
 
@@ -596,7 +592,7 @@ export default function SowalAppleApp() {
                     </div>
                   ))
                 ) : (
-                  activeFolder.files.length === 0 ? (
+                  (!activeFolder || activeFolder.files.length === 0) ? (
                     <div className="text-center py-16 text-white/40 text-xs">
                       Folder is empty. Click "Add PDF" to load study material.
                     </div>
@@ -654,7 +650,7 @@ export default function SowalAppleApp() {
           </div>
         </section>
 
-        {/* Right: Clean Conversation View */}
+        {/* Right: Companion View */}
         <section className="lg:col-span-7 flex flex-col h-full overflow-hidden">
           <div className="flex-1 bg-white/[0.03] border border-white/[0.08] rounded-3xl p-6 backdrop-blur-3xl flex flex-col justify-between overflow-hidden shadow-2xl relative">
             
@@ -713,7 +709,7 @@ export default function SowalAppleApp() {
               </div>
             </div>
 
-            {/* Chat Log: Clean Slate */}
+            {/* Chat Log */}
             <div className="flex-1 overflow-y-auto py-6 px-1 space-y-4 pr-2">
               {chatLog.length === 0 ? (
                 <div className="h-full flex flex-col items-center justify-center text-center text-white/20">
@@ -749,7 +745,7 @@ export default function SowalAppleApp() {
                 <div className="flex items-start">
                   <div className="px-5 py-3.5 rounded-3xl bg-white/[0.04] border border-white/[0.08] text-white/50 text-xs flex items-center gap-2 backdrop-blur-md">
                     <Loader2 size={13} className="animate-spin text-white/80" />
-                    Ujjwal bhai ke viva concept evaluate ho rahe hain...
+                    Viva concept evaluate ho raha hai...
                   </div>
                 </div>
               )}
@@ -775,7 +771,7 @@ export default function SowalAppleApp() {
 
                 <input 
                   type="text" 
-                  placeholder={isListening ? "Sun raha hoon Ujjwal bhai..." : activeDocument ? `"${activeDocument.name}" viva question ka jawab do...` : "Sawaal pucho ya viva answer do..."} 
+                  placeholder={isListening ? "Sun raha hoon Ujjwal..." : activeDocument ? `"${activeDocument.name}" viva question ka jawab do...` : "Sawaal pucho ya viva answer do..."} 
                   value={userInput} 
                   disabled={isLoading}
                   onChange={(e) => setUserInput(e.target.value)} 
